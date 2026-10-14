@@ -104,7 +104,14 @@
   .rel td.emp-nome, .rel th:nth-child(2), .rel th:nth-child(1), .rel th:nth-child(3) { text-align: left; }
   .rel td.emp-nome { padding-left: 8px; white-space: normal; font-size: 13px; }
   .rel th { font-size: 10.5px; } .rel th.atual { color: var(--accent); }
-  .rel col.c-rt { width: 6.5%; } .rel col.c-emp { width: 13%; } .rel col.c-st { width: 6%; } .rel col.c-sei { width: 12.5%; } .rel col.c-m { width: 4.7%; }
+  .rel col.c-rt { width: 6.5%; } .rel col.c-emp { width: 13%; } .rel col.c-st { width: 6%; } .rel col.c-sei { width: 15.5%; } .rel col.c-m { width: 4.45%; }
+  /* Relatorios: RT e SEI travados; editam pelo botao ao lado do nome da empresa */
+  .rel input[readonly] { border-color: transparent; background: transparent; cursor: default; }
+  .rel tr.em-edicao td { background: var(--warn-bg); }
+  .rel .nome-acao { display: flex; align-items: center; gap: 4px; justify-content: space-between; }
+  .rel .editar { padding: 2px 6px; font-size: 12px; line-height: 1.2; color: var(--text-muted); flex: none; }
+  .rel .editar.on { background: var(--good-bg); color: var(--good); border-color: var(--good); }
+  .rel .com-copiar .copiar { padding: 3px 6px; font-size: 12px; }
   .rel input.rt, .rel input.sei { min-width: 0; width: 100%; padding: 4px 5px; font-size: 12px; }
   .rel select.st { width: 100%; min-width: 0; padding: 4px 2px; font-size: 12px; font-weight: 700; text-align: center; text-align-last: center; cursor: pointer; }
   .rel select.st.st-ok { background: var(--good-bg); color: var(--good); border-color: var(--good); }
@@ -680,20 +687,39 @@ async function renderRelatorios() {
   $("conteudo").innerHTML = `<div class="caixa rel"><table>
     <colgroup><col class="c-rt"><col class="c-emp"><col class="c-st"><col class="c-st"><col class="c-sei">${MESES.map(() => `<col class="c-m">`).join("")}</colgroup>
     <tr><th>RT</th><th>Empresa</th><th>Conferência</th><th>Status</th><th>SEI - Relatório</th>${MESES.map((m, i) => `<th class="${i + 1 === mesAtual ? "atual" : ""}">${m}</th>`).join("")}</tr>
-    ${rows.map((e, i) => `${i === 0 || normRt(e.rt) !== normRt(rows[i - 1].rt) ? `<tr class="grupo"><td colspan="${5 + MESES.length}">${esc(e.rt || "Sem RT")}</td></tr>` : ""}<tr><td><input list="listaRt" class="rt" value="${esc(e.rt)}" data-nome="${esc(e.nome)}"></td><td class="emp-nome"><b>${esc(e.nome)}</b></td>
+    ${rows.map((e, i) => { const livre = editando.has("relatorios:" + e.nome), ro = livre ? "" : " readonly";   // RT e SEI travados; editam pelo botao da empresa
+      return `${i === 0 || normRt(e.rt) !== normRt(rows[i - 1].rt) ? `<tr class="grupo"><td colspan="${5 + MESES.length}">${esc(e.rt || "Sem RT")}</td></tr>` : ""}<tr class="${livre ? "em-edicao" : ""}"><td><input list="listaRt" class="rt" value="${esc(e.rt)}" data-nome="${esc(e.nome)}"${ro}></td>
+      <td class="emp-nome"><div class="nome-acao"><b>${esc(e.nome)}</b><button type="button" class="editar${livre ? " on" : ""}" data-nome="${esc(e.nome)}" title="${livre ? "Concluir edição" : "Editar RT e SEI desta empresa"}">${livre ? "✓" : "✎"}</button></div></td>
       <td>${stSelect(e, "conferencia_rel")}</td><td>${stSelect(e, "status_rel")}</td>
-      <td><input class="sei" value="${esc((petDe(e.nome) || {}).relatorios)}" data-nome="${esc(e.nome)}"></td>${MESES.map((m, i) => celula(e, i + 1)).join("")}</tr>`).join("")}
+      <td><div class="com-copiar"><input class="sei" value="${esc((petDe(e.nome) || {}).relatorios)}" data-nome="${esc(e.nome)}"${ro}><button type="button" class="copiar" data-nome="${esc(e.nome)}" title="Copiar número">⧉</button></div></td>${MESES.map((m, i) => celula(e, i + 1)).join("")}</tr>`; }).join("")}
     </table><datalist id="listaRt">${rts.map(r => `<option value="${esc(r)}">`).join("")}</datalist></div>
     <label class="so-pend"><input type="checkbox" id="soPend" ${soPendencia ? "checked" : ""}> mostrar só empresas com pendência</label>
     <div class="legenda"><b>FECHADA</b> = já existe um certificado do mês seguinte (o sistema lê a "Data do início do tratamento" escrita dentro do certificado), hora de fazer o relatório ·
     <b>Rel. OK</b> = o relatório do mês apareceu na pasta Relatórios · <b>OK</b> = o recibo do peticionamento apareceu na mesma pasta.
-    Os meses são preenchidos sozinhos pelo sistema; passe o mouse sobre a célula para ver as datas. RT e SEI - Relatório são editáveis aqui (o SEI é o mesmo número da aba Peticionamento SEI).</div>`;
+    Os meses são preenchidos sozinhos pelo sistema; passe o mouse sobre a célula para ver as datas. Para alterar RT ou SEI - Relatório, clique em ✎ ao lado do nome da empresa (o SEI é o mesmo número da aba Peticionamento SEI).</div>`;
   $("soPend").onchange = ev => { soPendencia = ev.target.checked; renderRelatorios(); };
+  document.querySelectorAll(".rel .editar").forEach(b => b.onclick = () => {
+    const k = "relatorios:" + b.dataset.nome;
+    if (editando.has(k)) {   // concluir: salva o campo que ainda estiver com o cursor antes de travar
+      const ativo = document.activeElement; if (ativo && ativo.dataset && ativo.dataset.nome === b.dataset.nome) ativo.blur();
+      editando.delete(k); renderRelatorios();
+    } else {
+      editando.add(k); renderRelatorios();
+      setTimeout(() => { const inp = [...document.querySelectorAll(".rel input.sei")].find(x => x.dataset.nome === b.dataset.nome); if (inp) inp.focus(); }, 30);
+    }
+  });
+  document.querySelectorAll(".rel .copiar").forEach(b => b.onclick = async () => {
+    const v = [...document.querySelectorAll(".rel input.sei")].find(x => x.dataset.nome === b.dataset.nome).value.trim();
+    if (!v) { toast("Campo vazio"); return; }
+    try { await navigator.clipboard.writeText(v); toast("Copiado: " + v); }
+    catch (e) { toast("Não foi possível copiar"); }
+  });
   document.querySelectorAll("input.rt").forEach(el => el.onchange = async () => {
     const valor = el.value.trim() || null;
     const { error } = await sb.from("curvas_empresas").update({ rt: valor, atualizado_em: new Date().toISOString() }).eq("nome", el.dataset.nome);
     if (error) { toast("Erro ao salvar: " + error.message); return; }
     const e = dados.empresas.find(x => x.nome === el.dataset.nome); if (e) e.rt = valor; toast("Salvo");
+    if (!el.isConnected) renderRelatorios();   // a tabela foi redesenhada (Concluir) antes de terminar de salvar
   });
   // Conferencia e Status (OK / S/A), coloridos
   document.querySelectorAll("select.st").forEach(el => el.onchange = async () => {
@@ -714,6 +740,7 @@ async function renderRelatorios() {
     }
     if (error) { toast("Erro ao salvar: " + error.message); return; }
     if (atual) atual.relatorios = valor; delete cacheTab.peticionamento; toast("Salvo");
+    if (!el.isConnected) renderRelatorios();   // a tabela foi redesenhada (Concluir) antes de terminar de salvar
   });
 }
 
