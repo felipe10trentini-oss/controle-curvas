@@ -143,13 +143,13 @@
 </head>
 <body>
 
-<!-- ============ LOGIN (mesmo login do Controle GLP) ============ -->
+<!-- ============ LOGIN (mesmos colaboradores da Emissão de Certificados) ============ -->
 <div id="telaLogin" class="login oculto">
   <form class="card" id="formLogin">
     <div class="logos"><img src="logo-mann.png" alt="MANN"><img src="logo-exata.png" alt="EXATA"></div>
     <h1>Controle de Curvas</h1>
-    <label for="email">E-mail de acesso</label><input id="email" type="email" autocomplete="username" required>
-    <label for="senha">Senha da equipe</label><input id="senha" type="password" autocomplete="current-password" required>
+    <label for="login">Login</label><input id="login" type="text" autocomplete="username" autocapitalize="none" required>
+    <label for="senha">Senha</label><input id="senha" type="password" autocomplete="current-password" required>
     <button class="prim" type="submit">Entrar</button>
     <div class="erro" id="erroLogin"></div>
   </form>
@@ -161,7 +161,7 @@
     <div class="logos"><img src="logo-mann.png" alt="MANN"><img src="logo-exata.png" alt="EXATA"></div>
     <h2>Controle de Curvas</h2>
     <span class="upd" id="upd"></span>
-    <div class="dir"><button id="sair">Sair</button></div>
+    <div class="dir"><span class="upd" id="quem"></span><button id="sair">Sair</button></div>
   </header>
   <main>
     <div class="barra">
@@ -203,17 +203,35 @@ const passaFiltro = (emp, resp) => {
 const respDe = emp => (dados.empresas.find(e => e.nome === emp) || {}).responsavel || "";
 
 /* ---------------- login ---------------- */
+// Cada colaborador entra com o login e a senha da Emissão de Certificados (conferidos em /api/login).
+// Sessões antigas do login único da equipe são encerradas; a sessão vale um turno (12 h), como lá.
+const DOMINIO_COLABORADOR = "@colaborador.controle-curvas.vercel.app";
+const VALIDADE_MS = 12 * 60 * 60 * 1000;
+const loginEm = () => { try { return Number(localStorage.getItem("curvas_login_em")) || 0; } catch (e) { return 0; } };
 async function iniciar() {
   const { data } = await sb.auth.getSession();
-  if (!data.session) { $("telaLogin").classList.remove("oculto"); $("telaApp").classList.add("oculto"); return; }
+  const s = data.session;
+  const valida = s && (s.user.email || "").endsWith(DOMINIO_COLABORADOR) && Date.now() - loginEm() < VALIDADE_MS;
+  if (s && !valida) await sb.auth.signOut();
+  if (!valida) { $("telaLogin").classList.remove("oculto"); $("telaApp").classList.add("oculto"); return; }
+  $("quem").textContent = (s.user.user_metadata || {}).nome || "";
   $("telaLogin").classList.add("oculto"); $("telaApp").classList.remove("oculto");
   await carregar(); setInterval(carregar, 120000);   // atualiza a cada 2 minutos
 }
 $("formLogin").onsubmit = async ev => {
   ev.preventDefault(); $("erroLogin").textContent = "";
-  const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("senha").value });
-  if (error) { $("erroLogin").textContent = "E-mail ou senha incorretos."; return; }
-  iniciar();
+  const botao = ev.target.querySelector("button"); botao.disabled = true;
+  try {
+    const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: $("login").value.trim(), senha: $("senha").value }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { $("erroLogin").textContent = d.error || "Não foi possível entrar."; return; }
+    const { error } = await sb.auth.setSession({ access_token: d.access_token, refresh_token: d.refresh_token });
+    if (error) { $("erroLogin").textContent = "Não foi possível abrir a sessão."; return; }
+    try { localStorage.setItem("curvas_login_em", String(Date.now())); } catch (e) {}
+    iniciar();
+  } catch (e) {
+    $("erroLogin").textContent = "Sem conexão. Tente de novo.";
+  } finally { botao.disabled = false; }
 };
 $("sair").onclick = async () => { await sb.auth.signOut(); location.reload(); };
 
