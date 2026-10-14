@@ -321,7 +321,7 @@ function renderControladoria() {
   const linhas = dias.map(d => {
     const obs = d >= INICIO;
     return { d, baixadas: n(cs, c => c.b === d), emitidas: n(cs, c => c.e === d), salvas: n(cs, c => c.s === d),
-      semCert: obs ? n(cs, c => c.raiz && c.b <= d && (!c.e || c.e > d)) : null,
+      semCert: obs ? n(cs, c => c.raiz && c.b <= d && (!c.e || c.e > d) && !(c.s && c.s <= d)) : null,   // salva sem certificado registrado = concluida
       semSalvar: obs ? n(cs, c => c.raiz && c.b <= d && (!c.s || c.s > d)) : null };
   });
   const tot = k => linhas.reduce((t, l) => t + l[k], 0);
@@ -329,8 +329,9 @@ function renderControladoria() {
   const respNomes = [...new Set(cs.map(c => c.resp))].sort((a, b) => a.localeCompare(b, "pt-BR"));
   const porResp = respNomes.map(r => { const x = cs.filter(c => c.resp === r);
     return { r, baixadas: n(x, c => c.b >= min && c.b <= hoje), emitidas: n(x, c => c.e >= min && c.e <= hoje), salvas: n(x, c => c.s >= min && c.s <= hoje),
-      semCert: n(x, c => c.raiz && !c.e), semSalvar: n(x, c => c.raiz && !c.s) }; });
-  const pend = cs.filter(c => c.raiz && (!c.e || !c.s)).map(c => ({ ...c, dias: Math.max(0, Math.round((new Date(hoje) - new Date(c.b)) / 864e5)), sit: !c.e ? "Sem certificado" : "Sem salvar" }))
+      semCert: n(x, c => c.raiz && !c.e && !c.s), semSalvar: n(x, c => c.raiz && !c.s) }; });
+  const pend = cs.filter(c => c.raiz && !c.s)   // pendente = ainda nao salva na empresa
+    .filter(c => true).map(c => ({ ...c, dias: Math.max(0, Math.round((new Date(hoje) - new Date(c.b)) / 864e5)), sit: !c.e ? "Sem certificado" : "Sem salvar" }))
     .sort((a, b) => b.dias - a.dias || a.empresa.localeCompare(b.empresa, "pt-BR"));
   const cel = v => v === null ? `<td class="n">—</td>` : `<td class="n">${v}</td>`;
   const soma = k => porResp.reduce((t, r) => t + r[k], 0);
