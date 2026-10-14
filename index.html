@@ -284,12 +284,22 @@ async function carregar() {
   const digitando = document.activeElement && document.activeElement.id === "prioridade";
   if ((aba === "fazer" && !digitando) || aba === "faltando" || !carregar.feito) render();
   carregar.feito = true;
+  if ((aba === "grade" || aba === "controladoria") && dados.curvas) {   // Controle de curvas e Controladoria tambem se atualizam sozinhas
+    try { await carregarCurvas(); } catch (e) {}
+    if (aba === "grade" || aba === "controladoria") render();
+  }
 }
+let semUnidade = false;
 async function carregarCurvas() {   // todas as curvas do ano (pagina de 1000 em 1000)
   const lista = [];
   for (let de = 0; ; de += 1000) {
-    const { data, error } = await sb.from("curvas").select("empresa,estufa,ciclo,sigla,coletada_em,emitida_em,salva_em,origem")
+    const campos = "empresa,estufa,ciclo,sigla,coletada_em,emitida_em,salva_em,origem";
+    let { data, error } = await sb.from("curvas").select(semUnidade ? campos : campos + ",unidade")
       .gte("coletada_em", `${ANO}-01-01`).order("coletada_em").range(de, de + 999);
+    if (error && !semUnidade) {   // a coluna "unidade" so existe depois do SQL 12: tenta de novo sem ela
+      semUnidade = true;
+      ({ data, error } = await sb.from("curvas").select(campos).gte("coletada_em", `${ANO}-01-01`).order("coletada_em").range(de, de + 999));
+    }
     if (error) throw error;
     lista.push(...data); if (data.length < 1000) break;
   }
@@ -310,7 +320,7 @@ function mostrarAtualizacao() {
 }
 
 /* ---------------- abas ---------------- */
-$("abas").onclick = ev => { const b = ev.target.closest("button"); if (!b) return; aba = b.dataset.aba; document.querySelectorAll("#abas button").forEach(x => x.classList.toggle("on", x === b)); delete cacheTab[aba]; render(); };   // ao abrir uma aba editavel, le de novo do banco
+$("abas").onclick = ev => { const b = ev.target.closest("button"); if (!b) return; aba = b.dataset.aba; document.querySelectorAll("#abas button").forEach(x => x.classList.toggle("on", x === b)); delete cacheTab[aba]; if (aba === "grade" || aba === "controladoria") dados.curvas = null; render(); };   // ao abrir uma aba editavel, le de novo do banco
 $("busca").oninput = () => render();
 window.matchMedia("(max-width: 700px)").addEventListener("change", () => { if (aba === "fazer") renderFazer(); });   // girou o celular / mudou a janela
 $("resp").onchange = () => render();
@@ -377,7 +387,7 @@ function renderControladoria() {
     <h3 class="ctl-sub">Curvas paradas agora — sem certificado (${pend.length})</h3>
     <div class="caixa"><table>
       <tr><th>Empresa</th><th>Responsável</th><th>Curva</th><th>Baixada em</th><th>Dias parada</th></tr>
-      ${pend.map(c => `<tr><td><b>${esc(c.empresa)}</b></td><td>${esc(c.resp)}</td><td>${esc(c.estufa ?? "—")}-${esc(c.ciclo)}</td><td>${fmt(c.b)}</td><td class="n ${c.dias >= 2 ? "atraso" : ""}">${c.dias}</td></tr>`).join("") || `<tr><td colspan="5">Nenhuma curva parada.</td></tr>`}
+      ${pend.map(c => `<tr><td><b>${esc(c.empresa)}</b></td><td>${esc(c.resp)}</td><td>${esc(c.estufa ?? c.unidade ?? "—")}-${esc(c.ciclo)}</td><td>${fmt(c.b)}</td><td class="n ${c.dias >= 2 ? "atraso" : ""}">${c.dias}</td></tr>`).join("") || `<tr><td colspan="5">Nenhuma curva parada.</td></tr>`}
     </table></div>
     <div class="legenda">Baixadas = curvas coletadas no dia. Certificados emitidos e Salvas = o que foi feito no dia, qualquer que seja o dia da baixada. "Sobraram do dia anterior" = curvas que ficaram sem certificado no fim do dia anterior; "Total a certificar" = sobraram + baixadas no dia. "Ficaram sem certificado/salvar" = o que ainda estava pendente no fim de cada dia (contado desde 01/10/2026, quando o monitor passou a acompanhar). "Por quem" = responsável da empresa no cadastro. Cancelamentos (CM/CE/R/MI) não entram na conta.</div>`;
   $("ctlPeriodo").onchange = ev => { ctlDias = Number(ev.target.value); renderControladoria(); };
@@ -486,12 +496,13 @@ function renderGrade() {
   const dias = [...new Set(cs.map(dia))].sort();
   const linhas = new Map();
   for (const c of cs) {
-    const k = c.empresa + "|" + (c.estufa ?? "");
-    if (!linhas.has(k)) linhas.set(k, { emp: c.empresa, e: c.estufa, cel: {}, ult: null });
+    const un = c.estufa ?? c.unidade ?? null;   // estufa numerica ou unidade (cidade, ex.: CJ Tedeski)
+    const k = c.empresa + "|" + (un ?? "");
+    if (!linhas.has(k)) linhas.set(k, { emp: c.empresa, e: un, cel: {}, ult: null });
     const L = linhas.get(k); (L.cel[dia(c)] = L.cel[dia(c)] || []).push(c);
     if (L.ultN == null || Number(c.ciclo) >= L.ultN) { L.ultN = Number(c.ciclo); L.ult = c.sigla ? `${c.ciclo} ${c.sigla}` : c.ciclo; }   // a ultima e o maior ciclo (os ciclos seguem em sequencia); conta mesmo cancelado (ex.: 431 CE)
   }
-  const ord = [...linhas.values()].sort((a, b) => a.emp.localeCompare(b.emp, "pt-BR") || (a.e ?? 0) - (b.e ?? 0));
+  const ord = [...linhas.values()].sort((a, b) => a.emp.localeCompare(b.emp, "pt-BR") || String(a.e ?? "").localeCompare(String(b.e ?? ""), "pt-BR", { numeric: true }));
   const cab = d => { const [y, m, dd] = d.split("-"); return `${dd}/${m}`; };
   let ant = null;
   $("conteudo").innerHTML = ord.length ? `<div class="caixa grade" id="gradeBox"><table>
