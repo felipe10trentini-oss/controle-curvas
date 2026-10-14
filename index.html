@@ -330,8 +330,7 @@ function renderControladoria() {
   const porResp = respNomes.map(r => { const x = cs.filter(c => c.resp === r);
     return { r, baixadas: n(x, c => c.b >= min && c.b <= hoje), emitidas: n(x, c => c.e >= min && c.e <= hoje), salvas: n(x, c => c.s >= min && c.s <= hoje),
       semCert: n(x, c => c.raiz && !c.e && !c.s), semSalvar: n(x, c => c.raiz && !c.s) }; });
-  const pend = cs.filter(c => c.raiz && !c.s)   // pendente = ainda nao salva na empresa
-    .filter(c => true).map(c => ({ ...c, dias: Math.max(0, Math.round((new Date(hoje) - new Date(c.b)) / 864e5)), sit: !c.e ? "Sem certificado" : "Sem salvar" }))
+  const pend = cs.filter(c => c.raiz && !c.e && !c.s).map(c => ({ ...c, dias: Math.max(0, Math.round((new Date(hoje) - new Date(c.b)) / 864e5)) }))
     .sort((a, b) => b.dias - a.dias || a.empresa.localeCompare(b.empresa, "pt-BR"));
   const cel = v => v === null ? `<td class="n">—</td>` : `<td class="n">${v}</td>`;
   const soma = k => porResp.reduce((t, r) => t + r[k], 0);
@@ -348,10 +347,10 @@ function renderControladoria() {
       ${linhas.map(l => `<tr><td>${fmt(l.d)}${l.d === hoje ? " (hoje)" : ""}</td>${cel(l.baixadas)}${cel(l.emitidas)}${cel(l.salvas)}${cel(l.semCert)}${cel(l.semSalvar)}</tr>`).join("")}
       <tr class="tot"><td><b>Total do período</b></td>${cel(tot("baixadas"))}${cel(tot("emitidas"))}${cel(tot("salvas"))}<td></td><td></td></tr>
     </table></div>
-    <h3 class="ctl-sub">Curvas paradas agora (${pend.length})</h3>
+    <h3 class="ctl-sub">Curvas paradas agora — sem certificado (${pend.length})</h3>
     <div class="caixa"><table>
-      <tr><th>Empresa</th><th>Responsável</th><th>Curva</th><th>Baixada em</th><th>Dias parada</th><th>Situação</th></tr>
-      ${pend.map(c => `<tr><td><b>${esc(c.empresa)}</b></td><td>${esc(c.resp)}</td><td>${esc(c.estufa ?? "—")}-${esc(c.ciclo)}</td><td>${fmt(c.b)}</td><td class="n ${c.dias >= 2 ? "atraso" : ""}">${c.dias}</td><td>${c.sit}</td></tr>`).join("") || `<tr><td colspan="6">Nenhuma curva parada.</td></tr>`}
+      <tr><th>Empresa</th><th>Responsável</th><th>Curva</th><th>Baixada em</th><th>Dias parada</th></tr>
+      ${pend.map(c => `<tr><td><b>${esc(c.empresa)}</b></td><td>${esc(c.resp)}</td><td>${esc(c.estufa ?? "—")}-${esc(c.ciclo)}</td><td>${fmt(c.b)}</td><td class="n ${c.dias >= 2 ? "atraso" : ""}">${c.dias}</td></tr>`).join("") || `<tr><td colspan="5">Nenhuma curva parada.</td></tr>`}
     </table></div>
     <div class="legenda">Baixadas = curvas coletadas no dia. Certificados emitidos e Salvas = o que foi feito no dia, qualquer que seja o dia da baixada. "Ficaram sem certificado/salvar" = o que ainda estava pendente no fim de cada dia (contado desde 01/10/2026, quando o monitor passou a acompanhar). "Por quem" = responsável da empresa no cadastro. Cancelamentos (CM/CE/R/MI) não entram na conta.</div>`;
   $("ctlPeriodo").onchange = ev => { ctlDias = Number(ev.target.value); renderControladoria(); };
