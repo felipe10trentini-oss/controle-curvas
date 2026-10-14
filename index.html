@@ -511,7 +511,7 @@ async function renderRelatorios() {
   const estado = r => !r ? null : r.recibo_em ? "ok" : r.relatorio_em ? "rel" : r.fechada_em ? "fec" : null;
   const pendente = (emp) => { const m = porEmp.get(emp.nome) || {}; return Object.keys(m).some(k => +k <= mesAtual && estado(m[k]) && estado(m[k]) !== "ok"); };
   const q = $("busca").value.trim().toLowerCase();
-  let rows = dados.empresas.filter(e => e.ativa && (!q || e.nome.toLowerCase().includes(q) || (e.rt || "").toLowerCase().includes(q)));
+  let rows = dados.empresas.filter(e => e.ativa && e.ordem_rel !== 0 && (!q || e.nome.toLowerCase().includes(q) || (e.rt || "").toLowerCase().includes(q)));
   if (soPendencia) rows = rows.filter(pendente);
   // mesma ordem da aba RELATORIOS 2026 da Planilha Geral (ordem_rel); empresas fora dela vao para o fim, em ordem alfabetica
   rows = [...rows].sort((a, b) => (a.ordem_rel ?? 1e9) - (b.ordem_rel ?? 1e9) || a.nome.localeCompare(b.nome, "pt-BR"));
