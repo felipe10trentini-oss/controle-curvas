@@ -62,6 +62,7 @@
   .ctl-topo { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; } .ctl-topo select { width: auto; }
   .ctl-sub { margin: 18px 2px 8px; font: 600 15px var(--font-body); }
   tr.tot td { background: var(--surface-2); }
+  td.tot-dia { font-weight: 700; background: var(--surface-2); }
   .caixa { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: auto; max-height: calc(100vh - 150px); }   /* rola dentro da caixa: o cabecalho da tabela fica fixo */
   .caixa.vazio { max-height: none; }
   table { border-collapse: collapse; width: 100%; }
@@ -329,10 +330,14 @@ function renderControladoria() {
   const dias = []; for (let i = 0; i < ctlDias; i++) { const d = new Date(); d.setDate(d.getDate() - i); dias.push(d.toLocaleDateString("sv-SE")); }
   const INICIO = "2026-10-01";   // o monitor acompanha o que fica pendente desde esta data
   const n = (arr, f) => arr.reduce((t, c) => t + (f(c) ? 1 : 0), 0);
+  const semCertEm = d => d >= INICIO ? n(cs, c => c.raiz && c.b <= d && (!c.e || c.e > d) && !(c.s && c.s <= d)) : null;   // salva sem certificado registrado = concluida
+  const diaAnterior = d => { const x = new Date(d + "T12:00:00"); x.setDate(x.getDate() - 1); return x.toLocaleDateString("sv-SE"); };
   const linhas = dias.map(d => {
-    const obs = d >= INICIO;
-    return { d, baixadas: n(cs, c => c.b === d), emitidas: n(cs, c => c.e === d), salvas: n(cs, c => c.s === d),
-      semCert: obs ? n(cs, c => c.raiz && c.b <= d && (!c.e || c.e > d) && !(c.s && c.s <= d)) : null,   // salva sem certificado registrado = concluida
+    const obs = d >= INICIO, baixadas = n(cs, c => c.b === d);
+    const sobraram = semCertEm(diaAnterior(d));   // pendentes no fim do dia anterior
+    return { d, baixadas, sobraram, total: sobraram === null ? null : sobraram + baixadas,
+      emitidas: n(cs, c => c.e === d), salvas: n(cs, c => c.s === d),
+      semCert: obs ? semCertEm(d) : null,
       semSalvar: obs ? n(cs, c => c.raiz && c.b <= d && (!c.s || c.s > d)) : null };
   });
   const tot = k => linhas.reduce((t, l) => t + l[k], 0);
@@ -354,16 +359,16 @@ function renderControladoria() {
       <tr class="tot"><td><b>Total</b></td>${cel(soma("baixadas"))}${cel(soma("emitidas"))}${cel(soma("salvas"))}${cel(soma("semCert"))}${cel(soma("semSalvar"))}</tr>
     </table></div>
     <div class="caixa" style="margin-top:14px"><table>
-      <tr><th>Dia</th><th>Baixadas</th><th>Certificados emitidos</th><th>Salvas na empresa</th><th>Ficaram sem certificado (fim do dia)</th><th>Ficaram sem salvar (fim do dia)</th></tr>
-      ${linhas.map(l => `<tr><td>${fmt(l.d)}${l.d === hoje ? " (hoje)" : ""}</td>${cel(l.baixadas)}${cel(l.emitidas)}${cel(l.salvas)}${cel(l.semCert)}${cel(l.semSalvar)}</tr>`).join("")}
-      <tr class="tot"><td><b>Total do período</b></td>${cel(tot("baixadas"))}${cel(tot("emitidas"))}${cel(tot("salvas"))}<td></td><td></td></tr>
+      <tr><th>Dia</th><th>Sobraram do dia anterior</th><th>Baixadas no dia</th><th>Total a certificar (sobraram + baixadas)</th><th>Certificados emitidos</th><th>Salvas na empresa</th><th>Ficaram sem certificado (fim do dia)</th><th>Ficaram sem salvar (fim do dia)</th></tr>
+      ${linhas.map(l => `<tr><td>${fmt(l.d)}${l.d === hoje ? " (hoje)" : ""}</td>${cel(l.sobraram)}${cel(l.baixadas)}<td class="n tot-dia">${l.total === null ? "—" : l.total}</td>${cel(l.emitidas)}${cel(l.salvas)}${cel(l.semCert)}${cel(l.semSalvar)}</tr>`).join("")}
+      <tr class="tot"><td><b>Total do período</b></td><td></td>${cel(tot("baixadas"))}<td></td>${cel(tot("emitidas"))}${cel(tot("salvas"))}<td></td><td></td></tr>
     </table></div>
     <h3 class="ctl-sub">Curvas paradas agora — sem certificado (${pend.length})</h3>
     <div class="caixa"><table>
       <tr><th>Empresa</th><th>Responsável</th><th>Curva</th><th>Baixada em</th><th>Dias parada</th></tr>
       ${pend.map(c => `<tr><td><b>${esc(c.empresa)}</b></td><td>${esc(c.resp)}</td><td>${esc(c.estufa ?? "—")}-${esc(c.ciclo)}</td><td>${fmt(c.b)}</td><td class="n ${c.dias >= 2 ? "atraso" : ""}">${c.dias}</td></tr>`).join("") || `<tr><td colspan="5">Nenhuma curva parada.</td></tr>`}
     </table></div>
-    <div class="legenda">Baixadas = curvas coletadas no dia. Certificados emitidos e Salvas = o que foi feito no dia, qualquer que seja o dia da baixada. "Ficaram sem certificado/salvar" = o que ainda estava pendente no fim de cada dia (contado desde 01/10/2026, quando o monitor passou a acompanhar). "Por quem" = responsável da empresa no cadastro. Cancelamentos (CM/CE/R/MI) não entram na conta.</div>`;
+    <div class="legenda">Baixadas = curvas coletadas no dia. Certificados emitidos e Salvas = o que foi feito no dia, qualquer que seja o dia da baixada. "Sobraram do dia anterior" = curvas que ficaram sem certificado no fim do dia anterior; "Total a certificar" = sobraram + baixadas no dia. "Ficaram sem certificado/salvar" = o que ainda estava pendente no fim de cada dia (contado desde 01/10/2026, quando o monitor passou a acompanhar). "Por quem" = responsável da empresa no cadastro. Cancelamentos (CM/CE/R/MI) não entram na conta.</div>`;
   $("ctlPeriodo").onchange = ev => { ctlDias = Number(ev.target.value); renderControladoria(); };
 }
 /* ---------------- desconsiderar avisos e ciclos faltando (Camila e Felipe) ---------------- */
