@@ -50,6 +50,9 @@
   .barra .filtros { margin-left: auto; display: flex; gap: 8px; }
   .barra .filtros input { width: 200px; } .barra .filtros select { width: 150px; }
   [hidden] { display: none !important; }
+  button.ign { margin-left: 8px; padding: 2px 8px; font-size: 11px; border: 1px solid var(--border, #c9c9c4); border-radius: 6px; background: transparent; color: var(--text-muted, #666); cursor: pointer; white-space: nowrap; }
+  button.ign:hover { background: var(--surface-2); color: var(--text); }
+  td.aviso button.ign { display: block; margin: 4px 0 0; width: fit-content; }
   /* faixa que separa um RT do outro (Relatorios 2026 e Programacoes) */
   tr.grupo td { background: var(--surface-2); color: var(--text); font: 700 11.5px var(--font-body); letter-spacing: .1em; text-transform: uppercase; text-align: left; padding: 7px 10px; border-top: 0; border-bottom: 1px solid var(--surface-2); }
   .rel tr.grupo td, .emp.prog tr.grupo td, .emp.pet tr.grupo td { text-align: left; padding: 7px 10px; white-space: nowrap; }
@@ -214,7 +217,8 @@ const respDe = emp => (dados.empresas.find(e => e.nome === emp) || {}).responsav
 // Cada colaborador entra com o login e a senha da Emissão de Certificados (conferidos em /api/login).
 // Sessões antigas do login único da equipe são encerradas; a sessão vale um turno (12 h), como lá.
 const DOMINIO_COLABORADOR = "@colaborador.controle-curvas.vercel.app";
-const CONTROLADORIA = ["camila", "felipe"];   // logins com acesso a aba Controladoria
+const CONTROLADORIA = ["camila", "felipe"];   // logins com acesso a aba Controladoria (e aos botoes Desconsiderar)
+let podeAjustar = false;
 const VALIDADE_MS = 12 * 60 * 60 * 1000;
 const loginEm = () => { try { return Number(localStorage.getItem("curvas_login_em")) || 0; } catch (e) { return 0; } };
 async function iniciar() {
@@ -226,6 +230,7 @@ async function iniciar() {
   $("quem").textContent = (s.user.user_metadata || {}).nome || "";
   const loginAtual = String((s.user.user_metadata || {}).login || (s.user.email || "").split("@")[0]).toLowerCase();
   $("abaControladoria").hidden = !CONTROLADORIA.includes(loginAtual);   // Controladoria: so Camila e Felipe
+  podeAjustar = CONTROLADORIA.includes(loginAtual);
   $("telaLogin").classList.add("oculto"); $("telaApp").classList.remove("oculto");
   await carregar(); setInterval(carregar, 120000);   // atualiza a cada 2 minutos
 }
@@ -358,9 +363,36 @@ function renderControladoria() {
     <div class="legenda">Baixadas = curvas coletadas no dia. Certificados emitidos e Salvas = o que foi feito no dia, qualquer que seja o dia da baixada. "Ficaram sem certificado/salvar" = o que ainda estava pendente no fim de cada dia (contado desde 01/10/2026, quando o monitor passou a acompanhar). "Por quem" = responsável da empresa no cadastro. Cancelamentos (CM/CE/R/MI) não entram na conta.</div>`;
   $("ctlPeriodo").onchange = ev => { ctlDias = Number(ev.target.value); renderControladoria(); };
 }
+/* ---------------- desconsiderar avisos e ciclos faltando (Camila e Felipe) ---------------- */
+const avisosOcultos = new Set();
+$("conteudo").addEventListener("click", async ev => {
+  const b = ev.target.closest("button.ign"); if (!b || !podeAjustar) return;
+  if (b.classList.contains("ign-av")) {
+    const nums = b.dataset.com.split(",").map(s => s.trim()).filter(Boolean);
+    if (!confirm(`Desconsiderar o(s) comunicado(s) ${nums.join(", ")} de ${b.dataset.emp}?\n\nEles saem da lista de avisos (não serão cobrados).`)) return;
+    b.disabled = true;
+    const { error } = await sb.from("curvas_avisos_ignorados").insert(nums.map(n => ({ empresa: b.dataset.emp, comunicado: Number(n), criado_por: ($("quem").textContent || "").trim() })));
+    if (error) { b.disabled = false; toast("Não foi possível salvar: " + error.message); return; }
+    nums.forEach(n => avisosOcultos.add(b.dataset.emp + "|" + n));
+    toast("Desconsiderado. O monitor confirma em até 5 minutos."); renderFazer();
+  } else if (b.classList.contains("ign-fa")) {
+    if (!confirm(`Desconsiderar os ciclos ${b.dataset.ciclos} de ${b.dataset.emp}${b.dataset.est ? " (estufa " + b.dataset.est + ")" : ""}?\n\nEles saem de "Curvas faltando".`)) return;
+    b.disabled = true;
+    const linha = { empresa: b.dataset.emp, ate_ciclo: Number(b.dataset.ate) }; if (b.dataset.est) linha.estufa = b.dataset.est;
+    const { error } = await sb.from("curvas_ignorar_faltando").insert(linha);
+    if (error) { b.disabled = false; toast("Não foi possível salvar: " + error.message); return; }
+    dados.faltando = dados.faltando.filter(r => !(r.empresa === b.dataset.emp && String(r.estufa ?? "") === b.dataset.est));
+    toast("Desconsiderado."); renderFaltando();
+  }
+});
 function renderFazer() {
   // empresas com aviso primeiro (ordem alfabetica), depois as outras (ordem alfabetica)
-  const rows = dados.fazer.filter(r => passaFiltro(r.empresa, r.responsavel))
+  const semOcultos = r => {   // comunicados desconsiderados nesta sessao somem na hora (o monitor confirma em ate 5 min)
+    if (!r.aviso_comunicado) return r;
+    const nums = String(r.aviso_comunicado).split(",").map(s => s.trim()).filter(s => s && !avisosOcultos.has(r.empresa + "|" + s));
+    return { ...r, aviso_comunicado: nums.length ? nums.join(", ") : null, aviso_qtd: nums.length };
+  };
+  const rows = dados.fazer.map(semOcultos).filter(r => passaFiltro(r.empresa, r.responsavel))
     .sort((a, b) => (!a.aviso_comunicado - !b.aviso_comunicado) || a.empresa.localeCompare(b.empresa, "pt-BR"));
   const horas = r => r.esperando_desde ? (Date.now() - new Date(r.esperando_desde)) / 36e5 : 0;
   const n = (v, cls) => v ? `<td class="n ${cls}">${v}</td>` : `<td></td>`;
@@ -380,7 +412,8 @@ function renderFazer() {
       ? `<small class="agenda" title="${esc(r.agendado_comunicado)}">Agendado${ag.length > 1 ? `s (${ag.length})` : ""} · ${ag.length > 1 ? "próximo " : ""}${esc(ag[0].split(" · ")[1] || ag[0])}</small>` : "";
     if (!r.aviso_comunicado) return agenda ? `<td>${agenda}</td>` : `<td></td>`;
     const qtd = r.aviso_qtd || 1;
-    return `<td class="aviso"><b>Baixar ciclo${qtd > 1 ? ` (${qtd})` : ""}</b><small>Comunicado${qtd > 1 ? "s" : ""} ${esc(intervalos(r.aviso_comunicado))} · desde ${dia(r.aviso_em)}</small>${agenda}</td>`;
+    const btn = podeAjustar ? `<button type="button" class="ign ign-av" data-emp="${esc(r.empresa)}" data-com="${esc(r.aviso_comunicado)}" title="Este comunicado não será feito: tirar da lista">Desconsiderar</button>` : "";
+    return `<td class="aviso"><b>Baixar ciclo${qtd > 1 ? ` (${qtd})` : ""}</b><small>Comunicado${qtd > 1 ? "s" : ""} ${esc(intervalos(r.aviso_comunicado))} · desde ${dia(r.aviso_em)}</small>${agenda}${btn}</td>`;
   };
   const celular = window.matchMedia("(max-width: 700px)").matches;   // no celular nao mostra a coluna Responsavel
   $("conteudo").innerHTML = rows.length ? `<div class="caixa fazer">${prioridadeHtml()}<table>
@@ -418,8 +451,8 @@ function renderFaltando() {
   const grupos = new Map();
   for (const r of rows) { const k = r.empresa + "|" + (r.estufa ?? ""); if (!grupos.has(k)) grupos.set(k, { ...r, ciclos: [] }); grupos.get(k).ciclos.push(r.ciclo_faltando); }
   $("conteudo").innerHTML = grupos.size ? `<div class="caixa"><table>
-    <tr><th>Empresa</th><th>Responsável</th><th>Estufa</th><th>Ciclos faltando</th></tr>
-    ${[...grupos.values()].map(g => `<tr><td><b>${esc(g.empresa)}</b></td><td>${esc(g.responsavel) || "—"}</td><td>${g.estufa ?? "—"}</td><td class="atraso">${g.ciclos.join(", ")}</td></tr>`).join("")}</table></div>
+    <tr><th>Empresa</th><th>Responsável</th><th>Estufa</th><th>Ciclos faltando</th>${podeAjustar ? "<th></th>" : ""}</tr>
+    ${[...grupos.values()].map(g => `<tr><td><b>${esc(g.empresa)}</b></td><td>${esc(g.responsavel) || "—"}</td><td>${g.estufa ?? "—"}</td><td class="atraso">${g.ciclos.join(", ")}</td>${podeAjustar ? `<td><button type="button" class="ign ign-fa" data-emp="${esc(g.empresa)}" data-est="${esc(g.estufa ?? "")}" data-ate="${Math.max(...g.ciclos.map(Number))}" data-ciclos="${esc(g.ciclos.join(", "))}">Desconsiderar</button></td>` : ""}</tr>`).join("")}</table></div>
     <div class="legenda">Ciclos que pularam na sequência, contando a partir de 01/10/2026. Para resolver: cole a curva na pasta da empresa, ou o arquivo de marcação — CM 3-297 (cancelado Marrari), CE 3-297 (cancelado Exata), R 3-297 (ressecagem), MI 3-297 (mercado interno).</div>`
     : `<div class="caixa vazio">Nenhuma curva faltando.</div>`;
 }
