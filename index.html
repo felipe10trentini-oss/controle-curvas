@@ -88,6 +88,17 @@
   .emp.prog input.mes { text-align: center; padding: 6px 2px; font-size: 12px; font-weight: 600; }
   .emp.prog input.v-ok { background: var(--good-bg); color: var(--good); } .emp.prog input.v-nd { background: var(--surface-2); color: var(--text-muted); }
   .emp .del { padding: 2px 6px; font-size: 16px; line-height: 1; color: var(--text-muted); }
+  /* Peticionamento SEI: dados fixos; editam so pelo botao Editar da linha */
+  .emp.travado input[readonly] { border-color: transparent; background: transparent; cursor: default; }
+  .emp.travado tr.em-edicao td { background: var(--warn-bg); }
+  .emp.travado th:last-child { width: 150px; }
+  .emp.travado td.acoes { white-space: nowrap; text-align: right; }
+  .emp.travado .editar { padding: 4px 9px; font-size: 12.5px; margin-right: 4px; }
+  .emp.travado .editar.on { background: var(--good-bg); color: var(--good); border-color: var(--good); }
+  .com-copiar { display: flex; gap: 4px; align-items: center; }
+  .com-copiar input { flex: 1; font-family: var(--font-mono); }
+  .copiar { padding: 4px 8px; font-size: 14px; line-height: 1; color: var(--text-muted); flex: none; }
+  .copiar:hover { color: var(--text); border-color: var(--text-muted); }
   .caixa.rel { overflow-x: auto; } .rel table { table-layout: fixed; width: 100%; min-width: 1050px; }
   .rel th, .rel td { padding: 5px 3px; text-align: center; white-space: nowrap; }
   .rel td.emp-nome, .rel th:nth-child(2), .rel th:nth-child(1), .rel th:nth-child(3) { text-align: left; }
@@ -538,13 +549,15 @@ const MESES = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "O
 const TABELAS = {
   peticionamento: { tabela: "curvas_peticionamento", ordem: "id", classe: "pet",
     colunas: [["empresa", "Empresa"], ["credenciamento", "SEI - Credenciamento"], ["relatorios", "SEI - Relatórios"]],
-    nova: { empresa: "Nova empresa" }, nome: r => r.empresa, texto: "Números dos processos SEI de cada empresa." },
+    travado: true, copiar: ["credenciamento", "relatorios"],   // campos fixos: so editam pelo botao Editar da linha; numeros SEI com botao copiar
+    nova: { empresa: "Nova empresa" }, nome: r => r.empresa, texto: "Números dos processos SEI de cada empresa. Para alterar uma empresa, clique em ✎ Editar na linha dela." },
   programacoes: { tabela: "curvas_programacoes", ordem: "id", classe: "prog",
     colunas: [["rt", "RT"], ["empresa", "Empresa"], ["assinado", "OK / Assinado"], ["sei_peticionamento", "SEI - Peticionamento"], ["m00", "Conferência"],
       ...MESES.map((m, i) => ["m" + String(i + 1).padStart(2, "0"), m])],
     nova: { empresa: "Nova empresa" }, nome: r => r.empresa, texto: "Programações mensais. Conferência: OK quando ela é realizada. OK em verde, \"-\" em cinza." },
 };
 const cacheTab = {};
+const editando = new Set();   // linhas liberadas para edicao nas tabelas travadas ("tabela:id")
 async function renderTabela(chave) {
   const cfg = TABELAS[chave];
   if (!cacheTab[chave]) {
@@ -556,21 +569,45 @@ async function renderTabela(chave) {
   }
   const q = $("busca").value.trim().toLowerCase();
   const rows = cacheTab[chave].filter(r => !q || cfg.colunas.slice(0, 4).some(([k]) => String(r[k] ?? "").toLowerCase().includes(q)));
+  const livre = r => !cfg.travado || editando.has(`${cfg.tabela}:${r.id}`);
   const cel = (r, [k]) => {
     const v = r[k] ?? "", mes = /^m\d\d$/.test(k);
-    return `<td><input class="${mes ? "mes " + (v === "OK" ? "v-ok" : v === "-" ? "v-nd" : "") : ""}" value="${esc(v)}" data-id="${r.id}" data-campo="${k}"></td>`;
+    const inp = `<input class="${mes ? "mes " + (v === "OK" ? "v-ok" : v === "-" ? "v-nd" : "") : ""}" value="${esc(v)}" data-id="${r.id}" data-campo="${k}"${livre(r) ? "" : " readonly"}>`;
+    if (!(cfg.copiar || []).includes(k)) return `<td>${inp}</td>`;
+    return `<td><div class="com-copiar">${inp}<button type="button" class="copiar" data-id="${r.id}" data-campo="${k}" title="Copiar número">⧉</button></div></td>`;
   };
-  $("conteudo").innerHTML = `<div class="caixa emp ${cfg.classe}">
+  const acoes = r => cfg.travado
+    ? `<button type="button" class="editar${livre(r) ? " on" : ""}" data-id="${r.id}" title="${livre(r) ? "Concluir edição" : "Editar os dados desta empresa"}">${livre(r) ? "✓ Concluir" : "✎ Editar"}</button><button type="button" class="del" data-id="${r.id}" title="Excluir linha">×</button>`
+    : `<button type="button" class="del" data-id="${r.id}" title="Excluir linha">×</button>`;
+  $("conteudo").innerHTML = `<div class="caixa emp ${cfg.classe}${cfg.travado ? " travado" : ""}">
     <div class="novo"><button type="button" id="addLinha">+ Nova linha</button></div>
     <table><tr>${cfg.colunas.map(c => `<th>${c[1]}</th>`).join("")}<th></th></tr>
-    ${rows.map((r, i) => `${cfg.colunas[0][0] === "rt" && (i === 0 || String(r.rt || "").trim().toLowerCase() !== String(rows[i - 1].rt || "").trim().toLowerCase()) ? `<tr class="grupo"><td colspan="${cfg.colunas.length + 1}">${esc(r.rt || "Sem RT")}</td></tr>` : ""}<tr>${cfg.colunas.map(c => cel(r, c)).join("")}<td><button type="button" class="del" data-id="${r.id}" title="Excluir linha">×</button></td></tr>`).join("")}
+    ${rows.map((r, i) => `${cfg.colunas[0][0] === "rt" && (i === 0 || String(r.rt || "").trim().toLowerCase() !== String(rows[i - 1].rt || "").trim().toLowerCase()) ? `<tr class="grupo"><td colspan="${cfg.colunas.length + 1}">${esc(r.rt || "Sem RT")}</td></tr>` : ""}<tr class="${livre(r) && cfg.travado ? "em-edicao" : ""}">${cfg.colunas.map(c => cel(r, c)).join("")}<td class="acoes">${acoes(r)}</td></tr>`).join("")}
     </table></div>
     <div class="legenda">${rows.length} linhas. ${cfg.texto} As alterações são salvas sozinhas ao sair do campo. A busca procura na empresa e nas primeiras colunas.</div>`;
+  document.querySelectorAll(".emp .editar").forEach(b => b.onclick = () => {
+    const k = `${cfg.tabela}:${b.dataset.id}`;
+    if (editando.has(k)) {   // concluir: salva o campo que ainda estiver com o cursor antes de travar
+      const ativo = document.activeElement; if (ativo && ativo.dataset && ativo.dataset.id === b.dataset.id) ativo.blur();
+      editando.delete(k); renderTabela(chave);
+    } else {
+      editando.add(k); renderTabela(chave);
+      setTimeout(() => { const inp = document.querySelector(`.emp input[data-id="${b.dataset.id}"]`); if (inp) inp.focus(); }, 30);
+    }
+  });
+  document.querySelectorAll(".emp .copiar").forEach(b => b.onclick = async () => {
+    const v = document.querySelector(`.emp input[data-id="${b.dataset.id}"][data-campo="${b.dataset.campo}"]`).value.trim();
+    if (!v) { toast("Campo vazio"); return; }
+    try { await navigator.clipboard.writeText(v); toast("Copiado: " + v); }
+    catch (e) { toast("Não foi possível copiar"); }
+  });
   document.querySelectorAll(".emp input[data-id]").forEach(el => el.onchange = async () => {
     const valor = el.value.trim() || null;
+    // atualiza a copia local antes de gravar: o "Concluir" redesenha a tabela enquanto o salvamento ainda esta em andamento
+    const r = cacheTab[chave].find(x => String(x.id) === el.dataset.id), antes = r ? r[el.dataset.campo] : null;
+    if (r) r[el.dataset.campo] = valor;
     const { error } = await sb.from(cfg.tabela).update({ [el.dataset.campo]: valor, atualizado_em: new Date().toISOString() }).eq("id", el.dataset.id);
-    if (error) { toast("Erro ao salvar: " + error.message); return; }
-    const r = cacheTab[chave].find(x => String(x.id) === el.dataset.id); if (r) r[el.dataset.campo] = valor;
+    if (error) { if (r) r[el.dataset.campo] = antes; toast("Erro ao salvar: " + error.message); renderTabela(chave); return; }
     if (el.classList.contains("mes")) { el.classList.toggle("v-ok", valor === "OK"); el.classList.toggle("v-nd", valor === "-"); }
     toast("Salvo");
   });
@@ -584,7 +621,7 @@ async function renderTabela(chave) {
   $("addLinha").onclick = async () => {
     const { data, error } = await sb.from(cfg.tabela).insert({ ...cfg.nova }).select().single();
     if (error) { toast("Erro: " + error.message); return; }
-    cacheTab[chave].push(data); $("busca").value = ""; renderTabela(chave); toast("Linha criada no final — preencha os campos");   // mesma ordem da planilha: novas linhas no fim
+    cacheTab[chave].push(data); editando.add(`${cfg.tabela}:${data.id}`); $("busca").value = ""; renderTabela(chave); toast("Linha criada no final — preencha os campos");   // mesma ordem da planilha: novas linhas no fim
     setTimeout(() => { const inp = [...document.querySelectorAll(".emp tr")].pop()?.querySelector("input"); if (inp) { inp.scrollIntoView({ block: "center" }); inp.focus(); inp.select(); } }, 50);
   };
 }
