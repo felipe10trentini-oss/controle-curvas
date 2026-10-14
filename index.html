@@ -50,6 +50,9 @@
   .barra .filtros { margin-left: auto; display: flex; gap: 8px; }
   .barra .filtros input { width: 200px; } .barra .filtros select { width: 150px; }
   [hidden] { display: none !important; }
+  /* faixa que separa um RT do outro (Relatorios 2026 e Programacoes) */
+  tr.grupo td { background: var(--surface-2); color: var(--accent); font: 700 11.5px var(--font-body); letter-spacing: .1em; text-transform: uppercase; text-align: left; padding: 7px 10px; border-top: 3px solid var(--accent); border-bottom: 1px solid var(--surface-2); }
+  .rel tr.grupo td, .emp.prog tr.grupo td, .emp.pet tr.grupo td { text-align: left; padding: 7px 10px; white-space: nowrap; }
   .ctl-topo { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; } .ctl-topo select { width: auto; }
   .ctl-sub { margin: 18px 2px 8px; font: 600 15px var(--font-body); }
   tr.tot td { background: var(--surface-2); }
@@ -430,7 +433,7 @@ function renderGrade() {
     const k = c.empresa + "|" + (c.estufa ?? "");
     if (!linhas.has(k)) linhas.set(k, { emp: c.empresa, e: c.estufa, cel: {}, ult: null });
     const L = linhas.get(k); (L.cel[dia(c)] = L.cel[dia(c)] || []).push(c);
-    L.ult = c.sigla ? `${c.ciclo} ${c.sigla}` : c.ciclo;   // a ultima baixada (as curvas vem em ordem de data); conta mesmo cancelada (ex.: 431 CE)
+    if (L.ultN == null || Number(c.ciclo) >= L.ultN) { L.ultN = Number(c.ciclo); L.ult = c.sigla ? `${c.ciclo} ${c.sigla}` : c.ciclo; }   // a ultima e o maior ciclo (os ciclos seguem em sequencia); conta mesmo cancelado (ex.: 431 CE)
   }
   const ord = [...linhas.values()].sort((a, b) => a.emp.localeCompare(b.emp, "pt-BR") || (a.e ?? 0) - (b.e ?? 0));
   const cab = d => { const [y, m, dd] = d.split("-"); return `${dd}/${m}`; };
@@ -515,7 +518,7 @@ async function renderTabela(chave) {
   $("conteudo").innerHTML = `<div class="caixa emp ${cfg.classe}">
     <div class="novo"><button type="button" id="addLinha">+ Nova linha</button></div>
     <table><tr>${cfg.colunas.map(c => `<th>${c[1]}</th>`).join("")}<th></th></tr>
-    ${rows.map(r => `<tr>${cfg.colunas.map(c => cel(r, c)).join("")}<td><button type="button" class="del" data-id="${r.id}" title="Excluir linha">×</button></td></tr>`).join("")}
+    ${rows.map((r, i) => `${cfg.colunas[0][0] === "rt" && (i === 0 || String(r.rt || "").trim().toLowerCase() !== String(rows[i - 1].rt || "").trim().toLowerCase()) ? `<tr class="grupo"><td colspan="${cfg.colunas.length + 1}">${esc(r.rt || "Sem RT")}</td></tr>` : ""}<tr>${cfg.colunas.map(c => cel(r, c)).join("")}<td><button type="button" class="del" data-id="${r.id}" title="Excluir linha">×</button></td></tr>`).join("")}
     </table></div>
     <div class="legenda">${rows.length} linhas. ${cfg.texto} As alterações são salvas sozinhas ao sair do campo. A busca procura na empresa e nas primeiras colunas.</div>`;
   document.querySelectorAll(".emp input[data-id]").forEach(el => el.onchange = async () => {
@@ -573,6 +576,7 @@ async function renderRelatorios() {
   // mesma ordem da aba RELATORIOS 2026 da Planilha Geral (ordem_rel); empresas fora dela vao para o fim, em ordem alfabetica
   rows = [...rows].sort((a, b) => (a.ordem_rel ?? 1e9) - (b.ordem_rel ?? 1e9) || a.nome.localeCompare(b.nome, "pt-BR"));
   const rts = [...new Set(dados.empresas.map(e => e.rt).filter(Boolean))].sort();
+  const normRt = s => String(s || "").trim().toLowerCase();
   const TXT = { ok: "OK", rel: "Rel. OK", fec: "FECHADA" };
   const celula = (emp, mes) => {
     const r = (porEmp.get(emp.nome) || {})[mes], st = estado(r);
@@ -583,7 +587,7 @@ async function renderRelatorios() {
   $("conteudo").innerHTML = `<div class="caixa rel"><table>
     <colgroup><col class="c-rt"><col class="c-emp"><col class="c-st"><col class="c-st"><col class="c-sei">${MESES.map(() => `<col class="c-m">`).join("")}</colgroup>
     <tr><th>RT</th><th>Empresa</th><th>Conferência</th><th>Status</th><th>SEI - Relatório</th>${MESES.map((m, i) => `<th class="${i + 1 === mesAtual ? "atual" : ""}">${m}</th>`).join("")}</tr>
-    ${rows.map(e => `<tr><td><input list="listaRt" class="rt" value="${esc(e.rt)}" data-nome="${esc(e.nome)}"></td><td class="emp-nome"><b>${esc(e.nome)}</b></td>
+    ${rows.map((e, i) => `${i === 0 || normRt(e.rt) !== normRt(rows[i - 1].rt) ? `<tr class="grupo"><td colspan="${5 + MESES.length}">${esc(e.rt || "Sem RT")}</td></tr>` : ""}<tr><td><input list="listaRt" class="rt" value="${esc(e.rt)}" data-nome="${esc(e.nome)}"></td><td class="emp-nome"><b>${esc(e.nome)}</b></td>
       <td>${stSelect(e, "conferencia_rel")}</td><td>${stSelect(e, "status_rel")}</td>
       <td><input class="sei" value="${esc((petDe(e.nome) || {}).relatorios)}" data-nome="${esc(e.nome)}"></td>${MESES.map((m, i) => celula(e, i + 1)).join("")}</tr>`).join("")}
     </table><datalist id="listaRt">${rts.map(r => `<option value="${esc(r)}">`).join("")}</datalist></div>
