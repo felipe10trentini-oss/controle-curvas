@@ -52,7 +52,10 @@
   [hidden] { display: none !important; }
   button.ign { margin-left: 8px; padding: 2px 8px; font-size: 11px; border: 1px solid var(--border, #c9c9c4); border-radius: 6px; background: transparent; color: var(--text-muted, #666); cursor: pointer; white-space: nowrap; }
   button.ign:hover { background: var(--surface-2); color: var(--text); }
-  td.aviso button.ign { display: block; margin: 4px 0 0; width: fit-content; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 2px; padding: 1px 2px 1px 7px; border: 1px solid var(--border, #c9c9c4); border-radius: 999px; background: var(--surface-2); font: 600 12px var(--font-mono, monospace); }
+  .chip button.ign { margin: 0; padding: 0 6px; border: 0; border-radius: 999px; font-size: 14px; line-height: 18px; color: var(--text-muted, #666); }
+  .chip button.ign:hover { background: var(--accent); color: #fff; }
   /* faixa que separa um RT do outro (Relatorios 2026 e Programacoes) */
   tr.grupo td { background: var(--surface-2); color: var(--text); font: 700 11.5px var(--font-body); letter-spacing: .1em; text-transform: uppercase; text-align: left; padding: 7px 10px; border-top: 0; border-bottom: 1px solid var(--surface-2); }
   .rel tr.grupo td, .emp.prog tr.grupo td, .emp.pet tr.grupo td { text-align: left; padding: 7px 10px; white-space: nowrap; }
@@ -412,8 +415,12 @@ function renderFazer() {
       ? `<small class="agenda" title="${esc(r.agendado_comunicado)}">Agendado${ag.length > 1 ? `s (${ag.length})` : ""} · ${ag.length > 1 ? "próximo " : ""}${esc(ag[0].split(" · ")[1] || ag[0])}</small>` : "";
     if (!r.aviso_comunicado) return agenda ? `<td>${agenda}</td>` : `<td></td>`;
     const qtd = r.aviso_qtd || 1;
-    const btn = podeAjustar ? `<button type="button" class="ign ign-av" data-emp="${esc(r.empresa)}" data-com="${esc(r.aviso_comunicado)}" title="Este comunicado não será feito: tirar da lista">Desconsiderar</button>` : "";
-    return `<td class="aviso"><b>Baixar ciclo${qtd > 1 ? ` (${qtd})` : ""}</b><small>Comunicado${qtd > 1 ? "s" : ""} ${esc(intervalos(r.aviso_comunicado))} · desde ${dia(r.aviso_em)}</small>${agenda}${btn}</td>`;
+    if (podeAjustar) {   // cada comunicado e uma etiqueta com um X: desconsidera so aquele
+      const nums = String(r.aviso_comunicado).split(",").map(s => s.trim()).filter(Boolean);
+      const chips = nums.map(n => `<span class="chip">${esc(n)}<button type="button" class="ign ign-av" data-emp="${esc(r.empresa)}" data-com="${esc(n)}" title="Desconsiderar só o comunicado ${esc(n)}">×</button></span>`).join("");
+      return `<td class="aviso"><b>Baixar ciclo${qtd > 1 ? ` (${qtd})` : ""}</b><small>desde ${dia(r.aviso_em)} · clique no × para desconsiderar só aquele</small><div class="chips">${chips}</div>${agenda}</td>`;
+    }
+    return `<td class="aviso"><b>Baixar ciclo${qtd > 1 ? ` (${qtd})` : ""}</b><small>Comunicado${qtd > 1 ? "s" : ""} ${esc(intervalos(r.aviso_comunicado))} · desde ${dia(r.aviso_em)}</small>${agenda}</td>`;
   };
   const celular = window.matchMedia("(max-width: 700px)").matches;   // no celular nao mostra a coluna Responsavel
   $("conteudo").innerHTML = rows.length ? `<div class="caixa fazer">${prioridadeHtml()}<table>
