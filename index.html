@@ -49,6 +49,10 @@
   .abas button.on { background: var(--text); color: var(--surface); border-color: var(--text); }
   .barra .filtros { margin-left: auto; display: flex; gap: 8px; }
   .barra .filtros input { width: 200px; } .barra .filtros select { width: 150px; }
+  [hidden] { display: none !important; }
+  .ctl-topo { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; } .ctl-topo select { width: auto; }
+  .ctl-sub { margin: 18px 2px 8px; font: 600 15px var(--font-body); }
+  tr.tot td { background: var(--surface-2); }
   .caixa { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: auto; max-height: calc(100vh - 150px); }   /* rola dentro da caixa: o cabecalho da tabela fica fixo */
   .caixa.vazio { max-height: none; }
   table { border-collapse: collapse; width: 100%; }
@@ -173,6 +177,7 @@
         <button data-aba="peticionamento">Peticionamento SEI</button>
         <button data-aba="relatorios">Relatórios 2026</button>
         <button data-aba="programacoes">Programações</button>
+        <button data-aba="controladoria" id="abaControladoria" hidden>Controladoria</button>
       </div>
       <div class="filtros">
         <input id="busca" type="search" placeholder="Buscar empresa">
@@ -206,6 +211,7 @@ const respDe = emp => (dados.empresas.find(e => e.nome === emp) || {}).responsav
 // Cada colaborador entra com o login e a senha da Emissão de Certificados (conferidos em /api/login).
 // Sessões antigas do login único da equipe são encerradas; a sessão vale um turno (12 h), como lá.
 const DOMINIO_COLABORADOR = "@colaborador.controle-curvas.vercel.app";
+const CONTROLADORIA = ["camila", "felipe"];   // logins com acesso a aba Controladoria
 const VALIDADE_MS = 12 * 60 * 60 * 1000;
 const loginEm = () => { try { return Number(localStorage.getItem("curvas_login_em")) || 0; } catch (e) { return 0; } };
 async function iniciar() {
@@ -215,6 +221,8 @@ async function iniciar() {
   if (s && !valida) await sb.auth.signOut();
   if (!valida) { $("telaLogin").classList.remove("oculto"); $("telaApp").classList.add("oculto"); return; }
   $("quem").textContent = (s.user.user_metadata || {}).nome || "";
+  const loginAtual = String((s.user.user_metadata || {}).login || (s.user.email || "").split("@")[0]).toLowerCase();
+  $("abaControladoria").hidden = !CONTROLADORIA.includes(loginAtual);   // Controladoria: so Camila e Felipe
   $("telaLogin").classList.add("oculto"); $("telaApp").classList.remove("oculto");
   await carregar(); setInterval(carregar, 120000);   // atualiza a cada 2 minutos
 }
@@ -257,7 +265,7 @@ async function carregar() {
 async function carregarCurvas() {   // todas as curvas do ano (pagina de 1000 em 1000)
   const lista = [];
   for (let de = 0; ; de += 1000) {
-    const { data, error } = await sb.from("curvas").select("empresa,estufa,ciclo,sigla,coletada_em")
+    const { data, error } = await sb.from("curvas").select("empresa,estufa,ciclo,sigla,coletada_em,emitida_em,salva_em,origem")
       .gte("coletada_em", `${ANO}-01-01`).order("coletada_em").range(de, de + 999);
     if (error) throw error;
     lista.push(...data); if (data.length < 1000) break;
@@ -292,12 +300,61 @@ async function render() {
   else if (aba === "peticionamento") renderTabela("peticionamento");
   else if (aba === "programacoes") renderTabela("programacoes");
   else if (aba === "relatorios") renderRelatorios();
-  else if (aba === "grade") {
+  else if (aba === "grade" || aba === "controladoria") {
     if (!dados.curvas) { $("conteudo").innerHTML = `<div class="caixa vazio">Carregando o controle de curvas…</div>`; try { await carregarCurvas(); } catch (e) { $("conteudo").innerHTML = `<div class="caixa vazio">Erro: ${esc(e.message)}</div>`; return; } }
     if (aba === "grade") renderGrade();
+    else if (!$("abaControladoria").hidden) renderControladoria();
   }
 }
 
+/* ---------------- controladoria (so Camila e Felipe) ---------------- */
+let ctlDias = 30;
+function renderControladoria() {
+  const sd = s => s ? new Date(s).toLocaleDateString("sv-SE") : "";            // dia local aaaa-mm-dd
+  const fmt = d => { const [y, m, dd] = d.split("-"); return `${dd}/${m}`; };
+  const cs = dados.curvas.filter(c => !c.sigla && passaFiltro(c.empresa, respDe(c.empresa)))
+    .map(c => ({ ...c, b: sd(c.coletada_em), e: sd(c.emitida_em), s: sd(c.salva_em), raiz: c.origem === "raiz", resp: respDe(c.empresa) || "Sem responsável" }));
+  const hoje = sd(new Date().toISOString());
+  const dias = []; for (let i = 0; i < ctlDias; i++) { const d = new Date(); d.setDate(d.getDate() - i); dias.push(d.toLocaleDateString("sv-SE")); }
+  const INICIO = "2026-10-01";   // o monitor acompanha o que fica pendente desde esta data
+  const n = (arr, f) => arr.reduce((t, c) => t + (f(c) ? 1 : 0), 0);
+  const linhas = dias.map(d => {
+    const obs = d >= INICIO;
+    return { d, baixadas: n(cs, c => c.b === d), emitidas: n(cs, c => c.e === d), salvas: n(cs, c => c.s === d),
+      semCert: obs ? n(cs, c => c.raiz && c.b <= d && (!c.e || c.e > d)) : null,
+      semSalvar: obs ? n(cs, c => c.raiz && c.b <= d && (!c.s || c.s > d)) : null };
+  });
+  const tot = k => linhas.reduce((t, l) => t + l[k], 0);
+  const min = dias[dias.length - 1];
+  const respNomes = [...new Set(cs.map(c => c.resp))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const porResp = respNomes.map(r => { const x = cs.filter(c => c.resp === r);
+    return { r, baixadas: n(x, c => c.b >= min && c.b <= hoje), emitidas: n(x, c => c.e >= min && c.e <= hoje), salvas: n(x, c => c.s >= min && c.s <= hoje),
+      semCert: n(x, c => c.raiz && !c.e), semSalvar: n(x, c => c.raiz && !c.s) }; });
+  const pend = cs.filter(c => c.raiz && (!c.e || !c.s)).map(c => ({ ...c, dias: Math.max(0, Math.round((new Date(hoje) - new Date(c.b)) / 864e5)), sit: !c.e ? "Sem certificado" : "Sem salvar" }))
+    .sort((a, b) => b.dias - a.dias || a.empresa.localeCompare(b.empresa, "pt-BR"));
+  const cel = v => v === null ? `<td class="n">—</td>` : `<td class="n">${v}</td>`;
+  const soma = k => porResp.reduce((t, r) => t + r[k], 0);
+  $("conteudo").innerHTML = `
+    <div class="ctl-topo"><label>Período</label>
+      <select id="ctlPeriodo">${[7, 15, 30, 60, 90].map(v => `<option value="${v}" ${v === ctlDias ? "selected" : ""}>Últimos ${v} dias</option>`).join("")}</select></div>
+    <div class="caixa"><table>
+      <tr><th>Responsável</th><th>Baixadas</th><th>Certificados emitidos</th><th>Salvas na empresa</th><th>Sem certificado hoje</th><th>Sem salvar hoje</th></tr>
+      ${porResp.map(r => `<tr><td><b>${esc(r.r)}</b></td>${cel(r.baixadas)}${cel(r.emitidas)}${cel(r.salvas)}${cel(r.semCert)}${cel(r.semSalvar)}</tr>`).join("")}
+      <tr class="tot"><td><b>Total</b></td>${cel(soma("baixadas"))}${cel(soma("emitidas"))}${cel(soma("salvas"))}${cel(soma("semCert"))}${cel(soma("semSalvar"))}</tr>
+    </table></div>
+    <div class="caixa" style="margin-top:14px"><table>
+      <tr><th>Dia</th><th>Baixadas</th><th>Certificados emitidos</th><th>Salvas na empresa</th><th>Ficaram sem certificado (fim do dia)</th><th>Ficaram sem salvar (fim do dia)</th></tr>
+      ${linhas.map(l => `<tr><td>${fmt(l.d)}${l.d === hoje ? " (hoje)" : ""}</td>${cel(l.baixadas)}${cel(l.emitidas)}${cel(l.salvas)}${cel(l.semCert)}${cel(l.semSalvar)}</tr>`).join("")}
+      <tr class="tot"><td><b>Total do período</b></td>${cel(tot("baixadas"))}${cel(tot("emitidas"))}${cel(tot("salvas"))}<td></td><td></td></tr>
+    </table></div>
+    <h3 class="ctl-sub">Curvas paradas agora (${pend.length})</h3>
+    <div class="caixa"><table>
+      <tr><th>Empresa</th><th>Responsável</th><th>Curva</th><th>Baixada em</th><th>Dias parada</th><th>Situação</th></tr>
+      ${pend.map(c => `<tr><td><b>${esc(c.empresa)}</b></td><td>${esc(c.resp)}</td><td>${esc(c.estufa ?? "—")}-${esc(c.ciclo)}</td><td>${fmt(c.b)}</td><td class="n ${c.dias >= 2 ? "atraso" : ""}">${c.dias}</td><td>${c.sit}</td></tr>`).join("") || `<tr><td colspan="6">Nenhuma curva parada.</td></tr>`}
+    </table></div>
+    <div class="legenda">Baixadas = curvas coletadas no dia. Certificados emitidos e Salvas = o que foi feito no dia, qualquer que seja o dia da baixada. "Ficaram sem certificado/salvar" = o que ainda estava pendente no fim de cada dia (contado desde 01/10/2026, quando o monitor passou a acompanhar). "Por quem" = responsável da empresa no cadastro. Cancelamentos (CM/CE/R/MI) não entram na conta.</div>`;
+  $("ctlPeriodo").onchange = ev => { ctlDias = Number(ev.target.value); renderControladoria(); };
+}
 function renderFazer() {
   // empresas com aviso primeiro (ordem alfabetica), depois as outras (ordem alfabetica)
   const rows = dados.fazer.filter(r => passaFiltro(r.empresa, r.responsavel))
