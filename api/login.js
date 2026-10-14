@@ -1,7 +1,7 @@
 // Login individual do Controle de Curvas.
 // Confere login e senha no site de Emissão de Certificados (mesmos colaboradores, madeireiras.operadores)
 // e abre uma sessão do Supabase do Controle de Curvas para aquele colaborador.
-// Variável de ambiente na Vercel: SUPABASE_SERVICE_ROLE_KEY (chave de serviço do projeto do Controle GLP/Curvas).
+// Variável de ambiente na Vercel: SUPABASE_SERVICE_ROLE_KEY (chave secreta "controlecurvas" do projeto do Controle GLP/Curvas).
 
 const SUPABASE_URL = "https://vjbyyjfmilmeyzeiinxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_HgnI-KSEvq1PJet6fmrV_g_MRf6HK4M";
@@ -13,9 +13,12 @@ const emailDe = login => `${login.toLowerCase().replace(/[^a-z0-9._-]/g, "-")}@$
 
 async function admin(caminho, metodo, corpo) {
   const chave = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Chave nova (sb_secret_...) vai só no apikey; a antiga (JWT service_role) também no Authorization.
+  const headers = { apikey: chave, "Content-Type": "application/json" };
+  if (!chave.startsWith("sb_")) headers.Authorization = `Bearer ${chave}`;
   const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/${caminho}`, {
     method: metodo,
-    headers: { apikey: chave, Authorization: `Bearer ${chave}`, "Content-Type": "application/json" },
+    headers,
     body: corpo && JSON.stringify(corpo),
   });
   return { ok: r.ok, status: r.status, dados: await r.json().catch(() => null) };
