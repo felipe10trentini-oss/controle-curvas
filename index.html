@@ -575,6 +575,13 @@ const TABELAS = {
     nova: { empresa: "Nova empresa" }, nome: r => r.empresa, texto: "Programações mensais. Conferência: OK quando ela é realizada. OK em verde, \"-\" em cinza." },
 };
 const cacheTab = {};
+// Junta as linhas do mesmo RT num grupo so, sem perder a ordem: os grupos seguem a ordem em que o RT aparece primeiro
+// e, dentro do grupo, as linhas mantem a ordem original (empresa nova vai para o fim do grupo do seu RT, nao para o fim da tabela)
+function juntarPorRt(rows) {
+  const chaveRt = r => String(r.rt || "").trim().toLowerCase(), grupos = new Map();
+  for (const r of rows) { const k = chaveRt(r); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r); }
+  return [...grupos.values()].flat();
+}
 const editando = new Set();   // linhas liberadas para edicao nas tabelas travadas ("tabela:id")
 async function renderTabela(chave) {
   const cfg = TABELAS[chave];
@@ -586,7 +593,8 @@ async function renderTabela(chave) {
     if (aba !== chave) return;
   }
   const q = $("busca").value.trim().toLowerCase();
-  const rows = cacheTab[chave].filter(r => !q || cfg.colunas.slice(0, 4).some(([k]) => String(r[k] ?? "").toLowerCase().includes(q)));
+  let rows = cacheTab[chave].filter(r => !q || cfg.colunas.slice(0, 4).some(([k]) => String(r[k] ?? "").toLowerCase().includes(q)));
+  if (cfg.colunas[0][0] === "rt") rows = juntarPorRt(rows);
   const livre = r => !cfg.travado || editando.has(`${cfg.tabela}:${r.id}`);
   const cel = (r, [k]) => {
     const v = r[k] ?? "", mes = /^m\d\d$/.test(k);
@@ -674,7 +682,7 @@ async function renderRelatorios() {
   let rows = dados.empresas.filter(e => e.ativa && e.ordem_rel !== 0 && (!q || e.nome.toLowerCase().includes(q) || (e.rt || "").toLowerCase().includes(q)));
   if (soPendencia) rows = rows.filter(pendente);
   // mesma ordem da aba RELATORIOS 2026 da Planilha Geral (ordem_rel); empresas fora dela vao para o fim, em ordem alfabetica
-  rows = [...rows].sort((a, b) => (a.ordem_rel ?? 1e9) - (b.ordem_rel ?? 1e9) || a.nome.localeCompare(b.nome, "pt-BR"));
+  rows = juntarPorRt([...rows].sort((a, b) => (a.ordem_rel ?? 1e9) - (b.ordem_rel ?? 1e9) || a.nome.localeCompare(b.nome, "pt-BR")));
   const rts = [...new Set(dados.empresas.map(e => e.rt).filter(Boolean))].sort();
   const normRt = s => String(s || "").trim().toLowerCase();
   const TXT = { ok: "OK", rel: "Rel. OK", fec: "FECHADA" };
