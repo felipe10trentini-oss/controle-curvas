@@ -378,6 +378,10 @@ function renderControladoria() {
     .sort((a, b) => b.dias - a.dias || a.empresa.localeCompare(b.empresa, "pt-BR"));
   const cel = v => v === null ? `<td class="n">—</td>` : `<td class="n">${v}</td>`;
   const soma = k => porResp.reduce((t, r) => t + r[k], 0);
+  // certificados emitidos por responsavel em cada dia (so os responsaveis que emitiram algo no periodo)
+  const respEmit = respNomes.filter(rn => cs.some(c => c.resp === rn && c.e && c.e >= min && c.e <= hoje));
+  const emitDia = dias.map(d => { const cont = respEmit.map(rn => n(cs, c => c.resp === rn && c.e === d)); return { d, cont, total: cont.reduce((a, b) => a + b, 0) }; });
+  const emitTot = respEmit.map((rn, k) => emitDia.reduce((a, l) => a + l.cont[k], 0));
   $("conteudo").innerHTML = `
     <div class="ctl-topo"><label>Período</label>
       <select id="ctlPeriodo">${[7, 15, 30, 60, 90].map(v => `<option value="${v}" ${v === ctlDias ? "selected" : ""}>Últimos ${v} dias</option>`).join("")}</select></div>
@@ -390,6 +394,12 @@ function renderControladoria() {
       <tr><th>Dia</th><th>Sobraram do dia anterior</th><th>Baixadas no dia</th><th>Total a certificar (sobraram + baixadas)</th><th>Certificados emitidos</th><th>Salvas na empresa</th><th>Ficaram sem certificado (fim do dia)</th><th>Ficaram sem salvar (fim do dia)</th></tr>
       ${linhas.map(l => `<tr><td>${fmt(l.d)}${l.d === hoje ? " (hoje)" : ""}</td>${cel(l.sobraram)}${cel(l.baixadas)}<td class="n tot-dia">${l.total === null ? "—" : l.total}</td>${cel(l.emitidas)}${cel(l.salvas)}${cel(l.semCert)}${cel(l.semSalvar)}</tr>`).join("")}
       <tr class="tot"><td><b>Total do período</b></td><td></td>${cel(tot("baixadas"))}<td></td>${cel(tot("emitidas"))}${cel(tot("salvas"))}<td></td><td></td></tr>
+    </table></div>
+    <h3 class="ctl-sub">Certificados emitidos por responsável, por dia</h3>
+    <div class="caixa"><table>
+      <tr><th>Dia</th>${respEmit.map(rn => `<th>${esc(rn)}</th>`).join("")}<th>Total</th></tr>
+      ${emitDia.map(l => `<tr><td>${fmt(l.d)}${l.d === hoje ? " (hoje)" : ""}</td>${l.cont.map(v => `<td class="n">${v || "·"}</td>`).join("")}<td class="n tot-dia">${l.total}</td></tr>`).join("") || ""}
+      <tr class="tot"><td><b>Total do período</b></td>${emitTot.map(v => `<td class="n"><b>${v}</b></td>`).join("")}<td class="n"><b>${emitTot.reduce((a, b) => a + b, 0)}</b></td></tr>
     </table></div>
     <h3 class="ctl-sub">Curvas paradas agora — sem certificado (${pend.length})</h3>
     <div class="caixa"><table>
