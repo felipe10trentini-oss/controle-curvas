@@ -39,7 +39,7 @@ module.exports = async (req, res) => {
   }
   if (cert.status === 401) return res.status(401).json({ error: "Login ou senha incorretos." });
   if (!cert.ok) return res.status(503).json({ error: "Não foi possível verificar o login agora." });
-  const { sessao } = await cert.json();
+  const { token, sessao } = await cert.json();
   const email = emailDe(sessao.login);
   const perfil = { nome: sessao.nome, login: sessao.login };
 
@@ -62,5 +62,8 @@ module.exports = async (req, res) => {
   // Nome e login atualizados (o nome pode ter mudado no cadastro de colaboradores).
   await admin(`users/${s.user.id}`, "PUT", { user_metadata: perfil });
 
-  res.status(200).json({ access_token: s.access_token, refresh_token: s.refresh_token, nome: sessao.nome });
+  // cert_token: sessão do site de certificados (12 h), usada pela aba RTs cadastrados via /api/rts.
+  // cert_rts: mesma permissão da aba Cadastros de lá (master ou acesso_madeireiras).
+  const certRts = sessao.perfil === "master" || !!(sessao.acessos && sessao.acessos.madeireiras);
+  res.status(200).json({ access_token: s.access_token, refresh_token: s.refresh_token, nome: sessao.nome, cert_token: token, cert_rts: certRts });
 };

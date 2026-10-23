@@ -95,6 +95,16 @@
   .emp.travado td.acoes { white-space: nowrap; text-align: right; }
   .emp.travado .editar { padding: 4px 9px; font-size: 12.5px; margin-right: 4px; }
   .emp.travado .editar.on { background: var(--good-bg); color: var(--good); border-color: var(--good); }
+  /* RTs cadastrados (mesma lista da Emissao de Certificados) */
+  .rts td.mono { font-family: var(--font-mono); font-size: 13px; }
+  .rts td.acoes { text-align: right; }
+  .rts .novo { align-items: center; } .rt-dica { margin-left: auto; color: var(--text-muted); font-size: 12px; }
+  button.link { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font: inherit; font-family: var(--font-body); font-size: 13px; cursor: pointer; }
+  .rt-form { padding: 16px; margin-bottom: 14px; max-height: none; overflow: visible; }
+  .rt-form h3 { margin: 0 0 6px; font-size: 15px; }
+  .rt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 4px 14px; }
+  .rt-botoes { display: flex; gap: 8px; }
+  button.prim-inline { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .com-copiar { display: flex; gap: 4px; align-items: center; }
   .com-copiar input { flex: 1; font-family: var(--font-mono); }
   .copiar { padding: 4px 8px; font-size: 14px; line-height: 1; color: var(--text-muted); flex: none; }
@@ -205,6 +215,7 @@
         <button data-aba="peticionamento">Peticionamento SEI</button>
         <button data-aba="relatorios">Relatórios 2026</button>
         <button data-aba="programacoes">Programações</button>
+        <button data-aba="rts" id="abaRts" hidden>RTs cadastrados</button>
         <button data-aba="controladoria" id="abaControladoria" hidden>Controladoria</button>
       </div>
       <div class="filtros">
@@ -243,6 +254,8 @@ const CONTROLADORIA = ["camila", "felipe"];   // logins com acesso a aba Control
 let podeAjustar = false;
 const VALIDADE_MS = 12 * 60 * 60 * 1000;
 const loginEm = () => { try { return Number(localStorage.getItem("curvas_login_em")) || 0; } catch (e) { return 0; } };
+const lerLocal = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
+const gravarLocal = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
 async function iniciar() {
   const { data } = await sb.auth.getSession();
   const s = data.session;
@@ -253,6 +266,7 @@ async function iniciar() {
   const loginAtual = String((s.user.user_metadata || {}).login || (s.user.email || "").split("@")[0]).toLowerCase();
   $("abaControladoria").hidden = !CONTROLADORIA.includes(loginAtual);   // Controladoria: so Camila e Felipe
   podeAjustar = CONTROLADORIA.includes(loginAtual);
+  $("abaRts").hidden = lerLocal("curvas_cert_rts") === "0";   // RTs: mesma permissao da aba Cadastros da Emissao de Certificados
   $("telaLogin").classList.add("oculto"); $("telaApp").classList.remove("oculto");
   await carregar(); setInterval(carregar, 120000);   // atualiza a cada 2 minutos
 }
@@ -265,13 +279,14 @@ $("formLogin").onsubmit = async ev => {
     if (!r.ok) { $("erroLogin").textContent = d.error || "Não foi possível entrar."; return; }
     const { error } = await sb.auth.setSession({ access_token: d.access_token, refresh_token: d.refresh_token });
     if (error) { $("erroLogin").textContent = "Não foi possível abrir a sessão."; return; }
-    try { localStorage.setItem("curvas_login_em", String(Date.now())); } catch (e) {}
+    gravarLocal("curvas_login_em", String(Date.now()));
+    gravarLocal("curvas_cert_token", d.cert_token || null); gravarLocal("curvas_cert_rts", d.cert_rts ? "1" : "0");   // aba RTs cadastrados
     iniciar();
   } catch (e) {
     $("erroLogin").textContent = "Sem conexão. Tente de novo.";
   } finally { botao.disabled = false; }
 };
-$("sair").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+$("sair").onclick = async () => { gravarLocal("curvas_cert_token", null); gravarLocal("curvas_cert_rts", null); await sb.auth.signOut(); location.reload(); };
 
 /* ---------------- dados ---------------- */
 async function carregar() {
@@ -333,13 +348,14 @@ window.matchMedia("(max-width: 700px)").addEventListener("change", () => { if (a
 $("resp").onchange = () => render();
 
 async function render() {
-  $("resp").style.display = ["peticionamento", "relatorios", "programacoes"].includes(aba) ? "none" : "";   // essas abas nao usam o filtro de responsavel
+  $("resp").style.display = ["peticionamento", "relatorios", "programacoes", "rts"].includes(aba) ? "none" : "";   // essas abas nao usam o filtro de responsavel
   if (aba === "fazer") renderFazer();
   else if (aba === "faltando") renderFaltando();
   else if (aba === "empresas") renderEmpresas();
   else if (aba === "peticionamento") renderTabela("peticionamento");
   else if (aba === "programacoes") renderTabela("programacoes");
   else if (aba === "relatorios") renderRelatorios();
+  else if (aba === "rts") renderRts();
   else if (aba === "grade" || aba === "controladoria") {
     if (!dados.curvas) { $("conteudo").innerHTML = `<div class="caixa vazio">Carregando o controle de curvas…</div>`; try { await carregarCurvas(); } catch (e) { $("conteudo").innerHTML = `<div class="caixa vazio">Erro: ${esc(e.message)}</div>`; return; } }
     if (aba === "grade") renderGrade();
@@ -659,6 +675,93 @@ async function renderTabela(chave) {
     if (error) { toast("Erro: " + error.message); return; }
     cacheTab[chave].push(data); editando.add(`${cfg.tabela}:${data.id}`); $("busca").value = ""; renderTabela(chave); toast("Linha criada no final — preencha os campos");   // mesma ordem da planilha: novas linhas no fim
     setTimeout(() => { const inp = [...document.querySelectorAll(".emp tr")].pop()?.querySelector("input"); if (inp) { inp.scrollIntoView({ block: "center" }); inp.focus(); inp.select(); } }, 50);
+  };
+}
+
+/* ---------------- RTs cadastrados (acessos do SEI) ---------------- */
+// Mesma lista da aba Cadastros da Emissao de Certificados: os dados e as senhas (criptografadas) ficam la;
+// /api/rts repassa os pedidos com a sessao do colaborador. Senha so aparece ao clicar em "mostrar".
+const rtSenhas = {};          // senhas abertas com "mostrar" (id -> senha), so enquanto a aba esta aberta
+let rtForm = null;            // null = sem formulario; {} = novo RT; {id,...} = editando
+async function apiRts(metodo, busca = "", corpo) {
+  const token = lerLocal("curvas_cert_token");
+  if (!token) return { ok: false, status: 401, dados: { error: "Para ver os RTs, clique em Sair e entre de novo." } };
+  try {
+    const r = await fetch("/api/rts" + busca, { method: metodo, cache: "no-store",
+      headers: { Authorization: "Bearer " + token, ...(corpo ? { "Content-Type": "application/json" } : {}) }, body: corpo && JSON.stringify(corpo) });
+    const dados = await r.json().catch(() => ({}));
+    if (r.status === 401 && !dados.error) dados.error = "Sessão expirada: clique em Sair e entre de novo.";
+    return { ok: r.ok, status: r.status, dados };
+  } catch (e) { return { ok: false, status: 0, dados: { error: "Sem conexão. Tente de novo." } }; }
+}
+async function copiarTexto(v, oque) {
+  try { await navigator.clipboard.writeText(v); toast(oque + " copiado"); } catch (e) { toast("Não foi possível copiar"); }
+}
+async function renderRts() {
+  if (!cacheTab.rts) {
+    $("conteudo").innerHTML = `<div class="caixa vazio">Carregando…</div>`;
+    const r = await apiRts("GET");
+    if (aba !== "rts") return;
+    if (!r.ok) { $("conteudo").innerHTML = `<div class="caixa vazio">${esc(r.dados.error || "Não foi possível carregar os RTs.")}</div>`; return; }
+    cacheTab.rts = r.dados.rts || []; for (const k in rtSenhas) delete rtSenhas[k];
+  }
+  const q = $("busca").value.trim().toLowerCase();
+  const rows = cacheTab.rts.filter(r => !q || [r.nome, r.login, r.empresa, r.funcao].some(v => String(v || "").toLowerCase().includes(q)));
+  const f = rtForm, funcoes = ["Resp. Técnico", "Resp. Legal"];
+  const form = !f ? "" : `<form class="caixa rt-form" id="formRt">
+      <h3>${f.id ? "Editar " + esc(f.nome) : "Cadastrar RT"}</h3>
+      <div class="rt-grid">
+        <div><label for="rtNome">Nome completo *</label><input id="rtNome" value="${esc(f.nome || "")}"></div>
+        <div><label for="rtLogin">E-mail de acesso ao SEI *</label><input id="rtLogin" type="email" autocomplete="off" value="${esc(f.login || "")}"></div>
+        <div><label for="rtSenha">${f.id ? "Nova senha do SEI (vazio = mantém)" : "Senha do SEI *"}</label><input id="rtSenha" type="password" autocomplete="new-password"></div>
+        <div><label for="rtFuncao">Responsabilidade</label><select id="rtFuncao"><option value="">—</option>${[...funcoes, ...(f.funcao && !funcoes.includes(f.funcao) ? [f.funcao] : [])].map(o => `<option ${o === (f.id ? f.funcao : "Resp. Técnico") ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></div>
+        <div><label for="rtEmpresa">Empresa (só se for RT de uma empresa)</label><input id="rtEmpresa" value="${esc(f.empresa || "")}"></div>
+      </div>
+      <div class="erro" id="erroRt"></div>
+      <div class="rt-botoes"><button type="submit" class="prim-inline">${f.id ? "Salvar alterações" : "Cadastrar RT"}</button><button type="button" id="cancelarRt">Cancelar</button></div>
+    </form>`;
+  $("conteudo").innerHTML = `${form}<div class="caixa rts">
+    <div class="novo"><button type="button" id="novoRt">+ Cadastrar RT</button><span class="rt-dica">Acessos do SEI — a senha fica oculta: clique em mostrar</span></div>
+    <table><tr><th>Nome completo</th><th>Responsabilidade</th><th>Empresa</th><th>E-mail (SEI)</th><th>Senha (SEI)</th><th></th></tr>
+    ${rows.length ? rows.map(r => { const s = rtSenhas[r.id];
+      return `<tr><td>${esc(r.nome)}</td><td>${esc(r.funcao || "—")}</td><td>${esc(r.empresa || "—")}</td>
+        <td class="mono">${esc(r.login)} <button type="button" class="link" data-copiar-login="${r.id}">copiar</button></td>
+        <td class="mono">${s !== undefined ? esc(s) : "••••••••"} <button type="button" class="link" data-senha="${r.id}">${s !== undefined ? "ocultar" : "mostrar"}</button>${s !== undefined ? ` · <button type="button" class="link" data-copiar-senha="${r.id}">copiar</button>` : ""}</td>
+        <td class="acoes"><button type="button" class="link" data-editar="${r.id}">Editar</button> · <button type="button" class="link" data-excluir="${r.id}">Excluir</button></td></tr>`; }).join("")
+      : `<tr><td colspan="6">${cacheTab.rts.length ? "Nenhum RT encontrado na busca." : "Nenhum RT cadastrado."}</td></tr>`}
+    </table></div>
+    <div class="legenda">${cacheTab.rts.length} RTs. É a mesma lista da aba Cadastros da Emissão de Certificados: o que mudar aqui muda lá também.</div>`;
+  const rtDe = id => cacheTab.rts.find(r => String(r.id) === String(id));
+  $("novoRt").onclick = () => { rtForm = {}; renderRts(); setTimeout(() => $("rtNome").focus(), 30); };
+  document.querySelectorAll("[data-copiar-login]").forEach(b => b.onclick = () => copiarTexto(rtDe(b.dataset.copiarLogin).login, "E-mail"));
+  document.querySelectorAll("[data-copiar-senha]").forEach(b => b.onclick = () => copiarTexto(rtSenhas[b.dataset.copiarSenha], "Senha"));
+  document.querySelectorAll("[data-senha]").forEach(b => b.onclick = async () => {
+    const id = b.dataset.senha;
+    if (rtSenhas[id] !== undefined) { delete rtSenhas[id]; renderRts(); return; }
+    const r = await apiRts("GET", "?senha=" + encodeURIComponent(id));
+    if (r.ok && typeof r.dados.senha === "string") { rtSenhas[id] = r.dados.senha; renderRts(); }
+    else toast(r.dados.error || "Não foi possível ler a senha.");
+  });
+  document.querySelectorAll("[data-editar]").forEach(b => b.onclick = () => { rtForm = { ...rtDe(b.dataset.editar) }; renderRts(); $("conteudo").scrollIntoView({ block: "start" }); setTimeout(() => $("rtNome").focus(), 30); });
+  document.querySelectorAll("[data-excluir]").forEach(b => b.onclick = async () => {
+    const rt = rtDe(b.dataset.excluir);
+    if (!confirm(`Excluir o acesso do SEI de ${rt.nome}?`)) return;
+    const r = await apiRts("DELETE", "?id=" + encodeURIComponent(rt.id));
+    if (!r.ok) { toast(r.dados.error || "Não foi possível excluir."); return; }
+    toast(rt.nome + " excluído(a)"); delete cacheTab.rts; renderRts();
+  });
+  if (!f) return;
+  $("cancelarRt").onclick = () => { rtForm = null; renderRts(); };
+  $("formRt").onsubmit = async ev => {
+    ev.preventDefault(); $("erroRt").textContent = "";
+    const corpo = { id: f.id, nome: $("rtNome").value.trim(), login: $("rtLogin").value.trim(), senha: $("rtSenha").value, funcao: $("rtFuncao").value, empresa: $("rtEmpresa").value.trim() };
+    if (!corpo.nome || !corpo.login || (!f.id && !corpo.senha)) { $("erroRt").textContent = "Preencha os campos com *."; return; }
+    const botao = ev.target.querySelector("button[type=submit]"); botao.disabled = true;
+    const r = await apiRts("POST", "", corpo);
+    botao.disabled = false;
+    if (!r.ok) { $("erroRt").textContent = r.dados.error || "Não foi possível salvar."; return; }
+    toast(f.id ? corpo.nome + " atualizado(a)" : corpo.nome + " cadastrado(a)");
+    rtForm = null; delete cacheTab.rts; renderRts();
   };
 }
 
