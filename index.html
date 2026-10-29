@@ -591,7 +591,7 @@ async function salvarCampo(ev) {
 /* ---------------- Peticionamento SEI e Programacoes (tabelas editaveis) ---------------- */
 const MESES = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 const TABELAS = {
-  peticionamento: { tabela: "curvas_peticionamento", ordem: "id", classe: "pet",
+  peticionamento: { tabela: "curvas_peticionamento", ordem: "id", alfabetica: true, classe: "pet",
     colunas: [["empresa", "Empresa"], ["credenciamento", "SEI - Credenciamento"], ["relatorios", "SEI - Relatórios"]],
     travado: true, copiar: ["credenciamento", "relatorios"],   // campos fixos: so editam pelo botao Editar da linha; numeros SEI com botao copiar
     nova: { empresa: "Nova empresa" }, nome: r => r.empresa, texto: "Números dos processos SEI de cada empresa. Para alterar uma empresa, clique em ✎ Editar na linha dela." },
@@ -621,6 +621,10 @@ async function renderTabela(chave) {
   const q = $("busca").value.trim().toLowerCase();
   let rows = cacheTab[chave].filter(r => !q || cfg.colunas.slice(0, 4).some(([k]) => String(r[k] ?? "").toLowerCase().includes(q)));
   if (cfg.colunas[0][0] === "rt") rows = juntarPorRt(rows);
+  if (cfg.alfabetica) {   // ordem alfabetica pelo nome da empresa; linha nova (ainda sem nome) fica no topo ate ser preenchida
+    const nova = r => !String(r.empresa || "").trim() || String(r.empresa).trim() === cfg.nova.empresa;
+    rows = [...rows].sort((a, b) => (nova(b) - nova(a)) || String(a.empresa || "").localeCompare(String(b.empresa || ""), "pt-BR", { sensitivity: "base", numeric: true }));
+  }
   const livre = r => !cfg.travado || editando.has(`${cfg.tabela}:${r.id}`);
   const cel = (r, [k]) => {
     const v = r[k] ?? "", mes = /^m\d\d$/.test(k);
@@ -673,8 +677,8 @@ async function renderTabela(chave) {
   $("addLinha").onclick = async () => {
     const { data, error } = await sb.from(cfg.tabela).insert({ ...cfg.nova }).select().single();
     if (error) { toast("Erro: " + error.message); return; }
-    cacheTab[chave].push(data); editando.add(`${cfg.tabela}:${data.id}`); $("busca").value = ""; renderTabela(chave); toast("Linha criada no final — preencha os campos");   // mesma ordem da planilha: novas linhas no fim
-    setTimeout(() => { const inp = [...document.querySelectorAll(".emp tr")].pop()?.querySelector("input"); if (inp) { inp.scrollIntoView({ block: "center" }); inp.focus(); inp.select(); } }, 50);
+    cacheTab[chave].push(data); editando.add(`${cfg.tabela}:${data.id}`); $("busca").value = ""; renderTabela(chave); toast(cfg.alfabetica ? "Linha criada no topo — preencha o nome e clique em ✓ Concluir: ela vai para a ordem alfabética" : "Linha criada no final — preencha os campos");
+    setTimeout(() => { const inp = document.querySelector(`.emp input[data-id="${data.id}"]`); if (inp) { inp.scrollIntoView({ block: "center" }); inp.focus(); inp.select(); } }, 50);
   };
 }
 
