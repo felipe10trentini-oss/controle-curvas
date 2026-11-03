@@ -109,12 +109,12 @@
   .com-copiar input { flex: 1; font-family: var(--font-mono); }
   .copiar { padding: 4px 8px; font-size: 14px; line-height: 1; color: var(--text-muted); flex: none; }
   .copiar:hover { color: var(--text); border-color: var(--text-muted); }
-  .caixa.rel { overflow-x: auto; } .rel table { table-layout: fixed; width: 100%; min-width: 1140px; }
+  .caixa.rel { overflow-x: auto; } .rel table { table-layout: fixed; width: 100%; min-width: 1240px; }
   .rel th, .rel td { padding: 5px 3px; text-align: center; white-space: nowrap; }
   .rel td.emp-nome, .rel th:nth-child(2), .rel th:nth-child(1), .rel th:nth-child(3) { text-align: left; }
   .rel td.emp-nome { padding-left: 8px; white-space: normal; font-size: 13px; }
   .rel th { font-size: 10.5px; } .rel th.atual { color: var(--accent); }
-  .rel col.c-rt { width: 5.5%; } .rel col.c-legal { width: 9.5%; } .rel col.c-emp { width: 10.8%; } .rel col.c-st { width: 6%; } .rel col.c-sei { width: 13.5%; } .rel col.c-m { width: 4.1%; }
+  .rel col.c-rt { width: 5.5%; } .rel col.c-legal { width: 9.5%; } .rel col.c-emp { width: 10.8%; } .rel col.c-st { width: 6%; } .rel col.c-sei { width: 13%; } .rel col.c-fe { width: 8.5%; } .rel col.c-m { width: 3.7%; }
   /* Relatorios: RT e SEI travados; editam pelo botao ao lado do nome da empresa */
   .rel input[readonly] { border-color: transparent; background: transparent; cursor: default; }
   .rel tr.em-edicao td { background: var(--warn-bg); }
@@ -127,7 +127,9 @@
   .rel select.st.st-ok { background: var(--good-bg); color: var(--good); border-color: var(--good); }
   .rel select.st.st-sa { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
   .rel select.st.st-x { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); font-size: 10.5px; }
-  .rel th:nth-child(4), .rel th:nth-child(5) { text-align: center; white-space: normal; }
+  .rel th:nth-child(4), .rel th:nth-child(5), .rel th:nth-child(6) { text-align: center; white-space: normal; }
+  .rel td.rm.fe { font-size: 10.5px; white-space: normal; line-height: 1.15; padding: 4px 3px; }
+  .rel td.rm.ag { background: var(--bad-bg); color: var(--bad); }   /* mes anterior ainda sem fechamento */
   .rel input.sei { font-family: var(--font-mono); font-size: 11px; }
   .rel td.rm { font-size: 11px; font-weight: 600; }
   .rel td.rm.ok { background: var(--good-bg); color: var(--good); }
@@ -826,6 +828,14 @@ async function renderRelatorios() {
   const rts = [...new Set(dados.empresas.map(e => e.rt).filter(Boolean))].sort();
   const legais = [...new Set(dados.empresas.map(e => e.resp_legal).filter(Boolean))].sort();
   const TXT = { ok: "OK", rel: "Rel. OK", fec: "FECHADA" };
+  // Fechamento = situacao do MES ANTERIOR ao atual (em novembro, outubro): FECHADA / Rel. OK / OK, ou "Aguardando fechamento" se estiver em branco
+  const prevMes = hoje.getFullYear() > ANO ? 12 : hoje.getFullYear() === ANO ? hoje.getMonth() : 0;
+  const fechamento = emp => {
+    if (!prevMes) return `<td class="rm"></td>`;
+    const r = (porEmp.get(emp.nome) || {})[prevMes]; let st = estado(r);
+    if (!st && manual.has(`${emp.nome}|${prevMes}`)) st = "fec";
+    return st ? `<td class="rm fe ${st}" title="Referente a ${MESES[prevMes - 1]}">${TXT[st]}</td>` : `<td class="rm fe ag" title="Referente a ${MESES[prevMes - 1]}: ainda sem fechamento">Aguardando fechamento</td>`;
+  };
   const celula = (emp, mes) => {
     const r = (porEmp.get(emp.nome) || {})[mes], st = estado(r);
     const dados_ = `data-emp="${esc(emp.nome)}" data-mes="${mes}"`, podeMarcar = podeAjustar && cacheTab.relatoriosManual !== null;
@@ -835,13 +845,13 @@ async function renderRelatorios() {
     return `<td class="rm ${st}" title="${esc(dicas)}">${TXT[st]}</td>`;
   };
   $("conteudo").innerHTML = `<div class="caixa rel"><table>
-    <colgroup><col class="c-rt"><col class="c-legal"><col class="c-emp"><col class="c-st"><col class="c-st"><col class="c-sei">${MESES.map(() => `<col class="c-m">`).join("")}</colgroup>
-    <tr><th>RT</th><th>Resp. legal</th><th>Empresa</th><th>Conferência</th><th>Status</th><th>SEI - Relatório</th>${MESES.map((m, i) => `<th class="${i + 1 === mesAtual ? "atual" : ""}">${m}</th>`).join("")}</tr>
+    <colgroup><col class="c-rt"><col class="c-legal"><col class="c-emp"><col class="c-st"><col class="c-st"><col class="c-fe"><col class="c-sei">${MESES.map(() => `<col class="c-m">`).join("")}</colgroup>
+    <tr><th>RT</th><th>Resp. legal</th><th>Empresa</th><th>Conferência</th><th>Status</th><th>Fechamento${prevMes ? ` <small>(${MESES[prevMes - 1]})</small>` : ""}</th><th>SEI - Relatório</th>${MESES.map((m, i) => `<th class="${i + 1 === mesAtual ? "atual" : ""}">${m}</th>`).join("")}</tr>
     ${rows.map((e, i) => { const livre = editando.has("relatorios:" + e.nome), ro = livre ? "" : " readonly";   // RT e SEI travados; editam pelo botao da empresa
-      return `${i === 0 || chaveGrupo(e) !== chaveGrupo(rows[i - 1]) ? `<tr class="grupo"><td colspan="${6 + MESES.length}">${esc(tituloGrupo(e))}</td></tr>` : ""}<tr class="${livre ? "em-edicao" : ""}"><td><input list="listaRt" class="rt" value="${esc(e.rt)}" data-nome="${esc(e.nome)}"${ro}></td>
+      return `${i === 0 || chaveGrupo(e) !== chaveGrupo(rows[i - 1]) ? `<tr class="grupo"><td colspan="${7 + MESES.length}">${esc(tituloGrupo(e))}</td></tr>` : ""}<tr class="${livre ? "em-edicao" : ""}"><td><input list="listaRt" class="rt" value="${esc(e.rt)}" data-nome="${esc(e.nome)}"${ro}></td>
       <td><input list="listaLegal" class="legal" value="${esc(e.resp_legal)}" title="${esc(e.resp_legal)}" data-nome="${esc(e.nome)}"${ro}></td>
       <td class="emp-nome"><div class="nome-acao"><b>${esc(e.nome)}</b><button type="button" class="editar${livre ? " on" : ""}" data-nome="${esc(e.nome)}" title="${livre ? "Concluir edição" : "Editar RT, responsável legal e SEI desta empresa"}">${livre ? "✓" : "✎"}</button></div></td>
-      <td>${stSelect(e, "conferencia_rel")}</td><td>${stSelect(e, "status_rel")}</td>
+      <td>${stSelect(e, "conferencia_rel")}</td><td>${stSelect(e, "status_rel")}</td>${fechamento(e)}
       <td><div class="com-copiar"><input class="sei" value="${esc((petDe(e.nome) || {}).relatorios)}" data-nome="${esc(e.nome)}"${ro}><button type="button" class="copiar" data-nome="${esc(e.nome)}" title="Copiar número">⧉</button></div></td>${MESES.map((m, i) => celula(e, i + 1)).join("")}</tr>`; }).join("")}
     </table><datalist id="listaRt">${rts.map(r => `<option value="${esc(r)}">`).join("")}</datalist><datalist id="listaLegal">${legais.map(r => `<option value="${esc(r)}">`).join("")}</datalist></div>
     <label class="so-pend"><input type="checkbox" id="soPend" ${soPendencia ? "checked" : ""}> mostrar só empresas com pendência</label>
