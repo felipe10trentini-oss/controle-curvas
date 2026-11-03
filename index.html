@@ -109,12 +109,12 @@
   .com-copiar input { flex: 1; font-family: var(--font-mono); }
   .copiar { padding: 4px 8px; font-size: 14px; line-height: 1; color: var(--text-muted); flex: none; }
   .copiar:hover { color: var(--text); border-color: var(--text-muted); }
-  .caixa.rel { overflow-x: auto; } .rel table { table-layout: fixed; width: 100%; min-width: 1150px; }
+  .caixa.rel { overflow-x: auto; } .rel table { table-layout: fixed; width: 100%; min-width: 1250px; }
   .rel th, .rel td { padding: 5px 3px; text-align: center; white-space: nowrap; }
   .rel td.emp-nome, .rel th:nth-child(2), .rel th:nth-child(1) { text-align: left; }
   .rel td.emp-nome { padding-left: 8px; white-space: normal; font-size: 13px; }
   .rel th { font-size: 10.5px; } .rel th.atual { color: var(--accent); }
-  .rel col.c-rt { width: 6%; } .rel col.c-emp { width: 14.5%; } .rel col.c-st { width: 6%; } .rel col.c-sei { width: 13%; } .rel col.c-fe { width: 8.5%; } .rel col.c-m { width: 3.7%; }
+  .rel col.c-rt { width: 6%; } .rel col.c-emp { width: 13.5%; } .rel col.c-st { width: 6%; } .rel col.c-sei { width: 12.5%; } .rel col.c-fe { width: 8.5%; } .rel col.c-m { width: 3.9%; }
   /* Relatorios: RT e SEI travados; editam pelo botao ao lado do nome da empresa */
   .rel input[readonly] { border-color: transparent; background: transparent; cursor: default; }
   .rel tr.em-edicao td { background: var(--warn-bg); }
@@ -131,12 +131,12 @@
   .rel td.rm.fe { font-size: 10.5px; white-space: normal; line-height: 1.15; padding: 4px 3px; }
   .rel td.rm.ag { background: var(--bad-bg); color: var(--bad); }   /* mes anterior ainda sem fechamento */
   .rel input.sei { font-family: var(--font-mono); font-size: 11px; }
-  .rel td.rm { font-size: 11px; font-weight: 600; }
+  .rel td.rm { font-size: 8.6px; font-weight: 700; padding-left: 1px; padding-right: 1px; letter-spacing: -.1px; overflow: hidden; }   /* "FECHADA" inteira dentro da celula do mes */
   .rel td.rm.ok { background: var(--good-bg); color: var(--good); }
   .rel td.rm.rel { background: var(--info-bg); color: var(--info); }
   .rel td.rm.fec { background: var(--warn-bg); color: var(--warn); }
   .rel td.rm.edit { cursor: pointer; } .rel td.rm.edit:not(.fec):hover { background: var(--warn-bg); opacity: .55; }
-  .rel td.rm.man { outline: 1.5px dashed var(--warn); outline-offset: -3px; }   /* marcada a mao */
+  .rel td.rm.man { outline: 1.5px dashed var(--warn); outline-offset: -2px; }   /* marcada a mao */
   label.so-pend { display: flex; gap: 6px; align-items: center; margin: 10px 2px 0; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); }
   label.so-pend input { width: auto; }
   /* PRIORIDADE: campo vermelho em cima do cabecalho do "O que fazer" */
