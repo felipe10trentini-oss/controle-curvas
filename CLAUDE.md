@@ -5,7 +5,8 @@ Página única (`index.html`) publicada na Vercel em https://controle-curvas.ver
 - Banco: o mesmo Supabase do Controle GLP (`vjbyyjfmilmeyzeiinxf`). O Controle GLP fica em outro repositório: github.com/felipe10trentini-oss/Controle-GLP.
 - Login: cada colaborador entra com o login e a senha da Emissão de Certificados (madeireiras-cert). `api/login.js` confere em https://madeireiras-cert.vercel.app/api/auth e abre uma sessão do Supabase para `<login>@colaborador.controle-curvas.vercel.app`. Variável na Vercel: `SUPABASE_SERVICE_ROLE_KEY` (chave secreta "controlecurvas" do Supabase).
 
-- Relatórios 2026: `curvas_empresas.resp_legal` guarda o responsável legal (empresas autorizadas ao uso de marca têm ele em vez de RT); sem RT e com responsável legal, a empresa vai para o grupo "Responsável legal".
+- Aba Cadastros: é a própria tela `/madeireiras` da Emissão de Certificados (madeireiras-cert) num iframe, com o login enviado por postMessage (`EmbedCadastros.tsx` lá, `renderCadastros` aqui). Não recriar a tela aqui: mudanças nos cadastros são feitas no madeireiras-cert e aparecem nos dois. Só quem tem a permissão de Cadastros de lá vê a aba.
+- Relatórios 2026: empresa sem RT usa o "Resp. Legal" cadastrado nos RTs (`api/responsaveis-legais.js`) e fica no grupo com o nome dele. `curvas_empresas.resp_legal` existe no banco, mas a coluna foi tirada da tela.
 
 ## Dois computadores mexem neste projeto
 
