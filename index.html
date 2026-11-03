@@ -133,6 +133,8 @@
   .rel td.rm.ok { background: var(--good-bg); color: var(--good); }
   .rel td.rm.rel { background: var(--info-bg); color: var(--info); }
   .rel td.rm.fec { background: var(--warn-bg); color: var(--warn); }
+  .rel td.rm.edit { cursor: pointer; } .rel td.rm.edit:not(.fec):hover { background: var(--warn-bg); opacity: .55; }
+  .rel td.rm.man { outline: 1.5px dashed var(--warn); outline-offset: -3px; }   /* marcada a mao */
   label.so-pend { display: flex; gap: 6px; align-items: center; margin: 10px 2px 0; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); }
   label.so-pend input { width: auto; }
   /* PRIORIDADE: campo vermelho em cima do cabecalho do "O que fazer" */
@@ -777,12 +779,29 @@ const stSelect = (e, campo) => {
   const v = e[campo] || "", ops = ["", "OK", "S/A"]; if (v && !ops.includes(v)) ops.push(v);
   return `<select class="st ${stClasse(v)}" data-nome="${esc(e.nome)}" data-campo="${campo}">${ops.map(o => `<option ${o === v ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
 };
+/* ---------------- Relatorios 2026: marcar mes FECHADA a mao (Camila e Felipe) ---------------- */
+$("conteudo").addEventListener("click", async ev => {
+  const c = ev.target.closest("td.rm.edit"); if (!c || !podeAjustar || aba !== "relatorios") return;
+  const emp = c.dataset.emp, mes = Number(c.dataset.mes), lista = cacheTab.relatoriosManual || [];
+  const ja = lista.find(m => m.empresa === emp && m.mes === mes);
+  if (ja) {
+    const { error } = await sb.from("curvas_relatorios_manual").delete().eq("empresa", emp).eq("ano", ANO).eq("mes", mes);
+    if (error) { toast("Não foi possível desfazer: " + error.message); return; }
+    cacheTab.relatoriosManual = lista.filter(m => m !== ja); toast("Marcação desfeita");
+  } else {
+    const { data, error } = await sb.from("curvas_relatorios_manual").insert({ empresa: emp, ano: ANO, mes, criado_por: ($("quem").textContent || "").trim() }).select().single();
+    if (error) { toast("Não foi possível salvar: " + error.message); return; }
+    cacheTab.relatoriosManual = [...lista, data]; toast(`${emp}: ${MESES[mes - 1]} marcado como FECHADA`);
+  }
+  renderRelatorios();
+});
 async function renderRelatorios() {
   if (!cacheTab.relatorios) {
     $("conteudo").innerHTML = `<div class="caixa vazio">Carregando…</div>`;
-    const [rel, pet] = await Promise.all([sb.from("curvas_relatorios").select("*").eq("ano", ANO), sb.from("curvas_peticionamento").select("*")]);
+    const [rel, pet, man] = await Promise.all([sb.from("curvas_relatorios").select("*").eq("ano", ANO), sb.from("curvas_peticionamento").select("*"), sb.from("curvas_relatorios_manual").select("*").eq("ano", ANO)]);
     if (rel.error) { $("conteudo").innerHTML = `<div class="caixa vazio">Erro: ${esc(rel.error.message)}</div>`; return; }
     cacheTab.relatorios = rel.data; cacheTab.relatoriosPet = pet.data || [];
+    cacheTab.relatoriosManual = man.error ? null : (man.data || []);   // null = tabela ainda nao criada (SQL 13)
     if (aba !== "relatorios") return;
   }
   // SEI - Relatorio de cada empresa = o mesmo numero da aba Peticionamento SEI (ligado por empresa_pasta, ou pelo nome igual)
@@ -794,7 +813,8 @@ async function renderRelatorios() {
   const d = s => s ? new Date(s).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "";
   // estado do mes: OK (recibo) > Rel. OK (relatorio) > FECHADA (primeiro certificado do mes seguinte) > vazio
   const estado = r => !r ? null : r.recibo_em ? "ok" : r.relatorio_em ? "rel" : r.fechada_em ? "fec" : null;
-  const pendente = (emp) => { const m = porEmp.get(emp.nome) || {}; return Object.keys(m).some(k => +k <= mesAtual && estado(m[k]) && estado(m[k]) !== "ok"); };
+  const manual = new Set((cacheTab.relatoriosManual || []).map(m => `${m.empresa}|${m.mes}`));   // meses marcados FECHADA a mao (empresas sem certificado)
+  const pendente = (emp) => { const m = porEmp.get(emp.nome) || {}; return Object.keys(m).some(k => +k <= mesAtual && estado(m[k]) && estado(m[k]) !== "ok") || [...Array(mesAtual).keys()].some(i => manual.has(`${emp.nome}|${i + 1}`) && !estado(m[i + 1])); };
   const q = $("busca").value.trim().toLowerCase();
   let rows = dados.empresas.filter(e => e.ativa && e.ordem_rel !== 0 && (!q || e.nome.toLowerCase().includes(q) || (e.rt || "").toLowerCase().includes(q)));
   if (soPendencia) rows = rows.filter(pendente);
@@ -805,7 +825,9 @@ async function renderRelatorios() {
   const TXT = { ok: "OK", rel: "Rel. OK", fec: "FECHADA" };
   const celula = (emp, mes) => {
     const r = (porEmp.get(emp.nome) || {})[mes], st = estado(r);
-    if (!st) return `<td class="rm"></td>`;
+    const dados_ = `data-emp="${esc(emp.nome)}" data-mes="${mes}"`, podeMarcar = podeAjustar && cacheTab.relatoriosManual !== null;
+    if (!st && manual.has(`${emp.nome}|${mes}`)) return `<td class="rm fec man${podeMarcar ? " edit" : ""}" ${podeMarcar ? dados_ : ""} title="Fechada manualmente${podeMarcar ? " — clique para desfazer" : ""}">FECHADA</td>`;
+    if (!st) return `<td class="rm${podeMarcar ? " edit" : ""}" ${podeMarcar ? dados_ + ' title="Clique para marcar FECHADA manualmente"' : ""}></td>`;
     const dicas = [r.fechada_em && `Fechada em ${d(r.fechada_em)}`, r.relatorio_em && `Relatório em ${d(r.relatorio_em)}`, r.recibo_em && `Recibo em ${d(r.recibo_em)}`].filter(Boolean).join(" · ");
     return `<td class="rm ${st}" title="${esc(dicas)}">${TXT[st]}</td>`;
   };
@@ -821,7 +843,7 @@ async function renderRelatorios() {
     <label class="so-pend"><input type="checkbox" id="soPend" ${soPendencia ? "checked" : ""}> mostrar só empresas com pendência</label>
     <div class="legenda"><b>FECHADA</b> = já existe um certificado do mês seguinte (o sistema lê a "Data do início do tratamento" escrita dentro do certificado), hora de fazer o relatório ·
     <b>Rel. OK</b> = o relatório do mês apareceu na pasta Relatórios · <b>OK</b> = o recibo do peticionamento apareceu na mesma pasta.
-    Os meses são preenchidos sozinhos pelo sistema; passe o mouse sobre a célula para ver as datas. Para alterar RT ou SEI - Relatório, clique em ✎ ao lado do nome da empresa (o SEI é o mesmo número da aba Peticionamento SEI).</div>`;
+    Empresa sem certificado: clique numa célula vazia para marcar o mês como <b>FECHADA</b> (contorno tracejado); clique de novo para desfazer. Os meses são preenchidos sozinhos pelo sistema; passe o mouse sobre a célula para ver as datas. Para alterar RT ou SEI - Relatório, clique em ✎ ao lado do nome da empresa (o SEI é o mesmo número da aba Peticionamento SEI).</div>`;
   $("soPend").onchange = ev => { soPendencia = ev.target.checked; renderRelatorios(); };
   document.querySelectorAll(".rel .editar").forEach(b => b.onclick = () => {
     const k = "relatorios:" + b.dataset.nome;
