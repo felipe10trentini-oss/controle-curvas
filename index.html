@@ -800,9 +800,11 @@ $("conteudo").addEventListener("click", async ev => {
 async function renderRelatorios() {
   if (!cacheTab.relatorios) {
     $("conteudo").innerHTML = `<div class="caixa vazio">Carregando…</div>`;
-    const [rel, pet, man] = await Promise.all([sb.from("curvas_relatorios").select("*").eq("ano", ANO), sb.from("curvas_peticionamento").select("*"), sb.from("curvas_relatorios_manual").select("*").eq("ano", ANO)]);
+    // Responsaveis legais vem dos RTs da Emissao de Certificados; se falhar, a aba abre igual, sem eles
+    const legais_ = fetch("/api/responsaveis-legais", { cache: "no-store", headers: { Authorization: "Bearer " + lerLocal("curvas_cert_token") } }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
+    const [rel, pet, man, leg] = await Promise.all([sb.from("curvas_relatorios").select("*").eq("ano", ANO), sb.from("curvas_peticionamento").select("*"), sb.from("curvas_relatorios_manual").select("*").eq("ano", ANO), legais_]);
     if (rel.error) { $("conteudo").innerHTML = `<div class="caixa vazio">Erro: ${esc(rel.error.message)}</div>`; return; }
-    cacheTab.relatorios = rel.data; cacheTab.relatoriosPet = pet.data || [];
+    cacheTab.relatorios = rel.data; cacheTab.relatoriosPet = pet.data || []; cacheTab.relatoriosLegais = leg.legais || [];
     cacheTab.relatoriosManual = man.error ? null : (man.data || []);   // null = tabela ainda nao criada (SQL 13)
     if (aba !== "relatorios") return;
   }
@@ -818,11 +820,13 @@ async function renderRelatorios() {
   const manual = new Set((cacheTab.relatoriosManual || []).map(m => `${m.empresa}|${m.mes}`));   // meses marcados FECHADA a mao (empresas sem certificado)
   const pendente = (emp) => { const m = porEmp.get(emp.nome) || {}; return Object.keys(m).some(k => +k <= mesAtual && estado(m[k]) && estado(m[k]) !== "ok") || [...Array(mesAtual).keys()].some(i => manual.has(`${emp.nome}|${i + 1}`) && !estado(m[i + 1])); };
   const q = $("busca").value.trim().toLowerCase();
-  let rows = dados.empresas.filter(e => e.ativa && e.ordem_rel !== 0 && (!q || e.nome.toLowerCase().includes(q) || (e.rt || "").toLowerCase().includes(q) || (e.resp_legal || "").toLowerCase().includes(q)));
+  // Autorizadas ao uso de marca nao tem RT: o responsavel legal vem do cadastro (RTs cadastrados, "Resp. Legal" + empresa)
+  const legalDe = e => e.resp_legal || ((cacheTab.relatoriosLegais || []).find(l => norm(l.empresa) === norm(e.nome)) || {}).nome || "";
+  let rows = dados.empresas.filter(e => e.ativa && e.ordem_rel !== 0 && (!q || e.nome.toLowerCase().includes(q) || (e.rt || "").toLowerCase().includes(q) || legalDe(e).toLowerCase().includes(q)));
   if (soPendencia) rows = rows.filter(pendente);
-  // Empresa sem RT mas com responsavel legal (autorizadas ao uso de marca) fica num grupo proprio, nao em "Sem RT"
-  const chaveGrupo = e => String(e.rt || "").trim().toLowerCase() || (String(e.resp_legal || "").trim() ? "\u0000legal" : "");
-  const tituloGrupo = e => e.rt || (chaveGrupo(e) ? "Responsável legal" : "Sem RT");
+  // Empresa sem RT mas com responsavel legal fica no grupo do nome dele, nao em "Sem RT"
+  const chaveGrupo = e => String(e.rt || "").trim().toLowerCase() || (legalDe(e) ? "\u0000" + norm(legalDe(e)) : "");
+  const tituloGrupo = e => e.rt || (legalDe(e) ? `${legalDe(e)} (Resp. Legal)` : "Sem RT");
   // mesma ordem da aba RELATORIOS 2026 da Planilha Geral (ordem_rel); empresas fora dela vao para o fim, em ordem alfabetica
   rows = juntarPorRt([...rows].sort((a, b) => (a.ordem_rel ?? 1e9) - (b.ordem_rel ?? 1e9) || a.nome.localeCompare(b.nome, "pt-BR")), chaveGrupo);
   const rts = [...new Set(dados.empresas.map(e => e.rt).filter(Boolean))].sort();
@@ -848,7 +852,7 @@ async function renderRelatorios() {
     <colgroup><col class="c-rt"><col class="c-emp"><col class="c-st"><col class="c-st"><col class="c-fe"><col class="c-sei">${MESES.map(() => `<col class="c-m">`).join("")}</colgroup>
     <tr><th>RT</th><th>Empresa</th><th>Conferência</th><th>Status</th><th>Fechamento${prevMes ? ` <small>(${MESES[prevMes - 1]})</small>` : ""}</th><th>SEI - Relatório</th>${MESES.map((m, i) => `<th class="${i + 1 === mesAtual ? "atual" : ""}">${m}</th>`).join("")}</tr>
     ${rows.map((e, i) => { const livre = editando.has("relatorios:" + e.nome), ro = livre ? "" : " readonly";   // RT e SEI travados; editam pelo botao da empresa
-      return `${i === 0 || chaveGrupo(e) !== chaveGrupo(rows[i - 1]) ? `<tr class="grupo"><td colspan="${6 + MESES.length}">${esc(tituloGrupo(e))}</td></tr>` : ""}<tr class="${livre ? "em-edicao" : ""}"><td><input list="listaRt" class="rt" value="${esc(e.rt)}" data-nome="${esc(e.nome)}"${ro}></td>
+      return `${i === 0 || chaveGrupo(e) !== chaveGrupo(rows[i - 1]) ? `<tr class="grupo"><td colspan="${6 + MESES.length}">${esc(tituloGrupo(e))}</td></tr>` : ""}<tr class="${livre ? "em-edicao" : ""}"><td><input list="listaRt" class="rt" value="${esc(e.rt)}" placeholder="${e.rt ? "" : esc(legalDe(e))}" title="${esc(e.rt || (legalDe(e) ? legalDe(e) + " (Resp. Legal)" : ""))}" data-nome="${esc(e.nome)}"${ro}></td>
       <td class="emp-nome"><div class="nome-acao"><b>${esc(e.nome)}</b><button type="button" class="editar${livre ? " on" : ""}" data-nome="${esc(e.nome)}" title="${livre ? "Concluir edição" : "Editar RT e SEI desta empresa"}">${livre ? "✓" : "✎"}</button></div></td>
       <td>${stSelect(e, "conferencia_rel")}</td><td>${stSelect(e, "status_rel")}</td>${fechamento(e)}
       <td><div class="com-copiar"><input class="sei" value="${esc((petDe(e.nome) || {}).relatorios)}" data-nome="${esc(e.nome)}"${ro}><button type="button" class="copiar" data-nome="${esc(e.nome)}" title="Copiar número">⧉</button></div></td>${MESES.map((m, i) => celula(e, i + 1)).join("")}</tr>`; }).join("")}
