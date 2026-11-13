@@ -44,7 +44,7 @@
   header .dir { margin-left: auto; display: flex; gap: 8px; align-items: center; }
   header a { color: var(--text-muted); font-size: 13px; text-decoration: none; }
   main { padding: 16px; max-width: 1500px; margin: 0 auto; }
-  .barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; position: sticky; top: var(--hh, 56px); z-index: 19; background: var(--bg, var(--surface-2)); padding: 8px 0; margin-top: -8px; }   /* abas fixas ao rolar, logo abaixo do cabecalho */
   .abas { display: flex; flex-wrap: wrap; gap: 6px; }
   .abas button.on { background: var(--text); color: var(--surface); border-color: var(--text); }
   .barra .filtros { margin-left: auto; display: flex; gap: 8px; }
@@ -230,6 +230,9 @@ const SUPABASE_ANON_KEY = "sb_publishable_HgnI-KSEvq1PJet6fmrV_g_MRf6HK4M";   //
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const $ = id => document.getElementById(id);
+// altura do cabecalho fixo: as abas ficam coladas logo abaixo dele
+const ajustaCab = () => { const h = document.querySelector("#telaApp header"); if (h) document.documentElement.style.setProperty("--hh", h.offsetHeight + "px"); };
+window.addEventListener("resize", ajustaCab); window.addEventListener("load", ajustaCab); setInterval(ajustaCab, 1500);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const ANO = new Date().getFullYear();
 let aba = "fazer";
@@ -751,7 +754,9 @@ async function renderRelatorios() {
   const chaveGrupo = e => String(e.rt || "").trim().toLowerCase() || (legalDe(e) ? "\u0000" + norm(legalDe(e)) : "");
   const tituloGrupo = e => e.rt || (legalDe(e) ? `${legalDe(e)} (Resp. Legal)` : "Sem RT");
   // mesma ordem da aba RELATORIOS 2026 da Planilha Geral (ordem_rel); empresas fora dela vao para o fim, em ordem alfabetica
-  rows = juntarPorRt([...rows].sort((a, b) => (a.ordem_rel ?? 1e9) - (b.ordem_rel ?? 1e9) || a.nome.localeCompare(b.nome, "pt-BR")), chaveGrupo);
+  // grupos em ordem alfabetica de responsavel (RT); depois os de Resp. Legal; "Sem RT" por ultimo. Dentro do grupo vale ordem_rel
+  const rankGrupo = e => { const k = chaveGrupo(e); return k === "" ? 2 : k.startsWith("\u0000") ? 1 : 0; };
+  rows = juntarPorRt([...rows].sort((a, b) => rankGrupo(a) - rankGrupo(b) || chaveGrupo(a).localeCompare(chaveGrupo(b), "pt-BR") || (a.ordem_rel ?? 1e9) - (b.ordem_rel ?? 1e9) || a.nome.localeCompare(b.nome, "pt-BR")), chaveGrupo);
   const rts = [...new Set(dados.empresas.map(e => e.rt).filter(Boolean))].sort();
   const legais = [...new Set(dados.empresas.map(e => e.resp_legal).filter(Boolean))].sort();
   const TXT = { ok: "OK", rel: "Rel. OK", fec: "FECHADA" };
