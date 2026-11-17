@@ -8,6 +8,8 @@ Página única (`index.html`) publicada na Vercel em https://controle-curvas.ver
 - Aba Cadastros: é a própria tela `/madeireiras` da Emissão de Certificados (madeireiras-cert) num iframe, com o login enviado por postMessage (`EmbedCadastros.tsx` lá, `renderCadastros` aqui). Não recriar a tela aqui: mudanças nos cadastros são feitas no madeireiras-cert e aparecem nos dois. Só quem tem a permissão de Cadastros de lá vê a aba.
 - Relatórios 2026: empresa sem RT usa o "Resp. Legal" cadastrado nos RTs (`api/responsaveis-legais.js`) e fica no grupo com o nome dele. `curvas_empresas.resp_legal` existe no banco, mas a coluna foi tirada da tela.
 
+- Controle de curvas: coluna fixa "Acesso hoje" com o botão Entrei (tabela `curvas_acessos`: empresa, por, em). Empresa com `curvas_empresas.via_whatsapp` (marcada na aba Empresas) mostra "WhatsApp" em vez do botão.
+
 ## Dois computadores mexem neste projeto
 
 O GitHub é a cópia oficial. Para um computador nunca apagar o trabalho do outro:
