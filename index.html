@@ -145,22 +145,12 @@
   .fazer th { font-size: 10.5px; letter-spacing: .03em; }
   .fazer col.c-emp { width: 22%; } .fazer col.c-resp { width: 10%; } .fazer col.c-aviso { width: 26%; }
   .fazer col.c-n { width: 10%; } .fazer col.c-esp { width: 12%; }
-  .fazer.com-acesso col.c-emp { width: 18%; } .fazer.com-acesso col.c-resp { width: 9%; } .fazer.com-acesso col.c-acesso { width: 12%; }
-  .fazer.com-acesso col.c-aviso { width: 25%; } .fazer.com-acesso col.c-n { width: 9%; } .fazer.com-acesso col.c-esp { width: 9%; }
   .fazer td.n { font-size: 14px; }
-  /* Acesso hoje (botao Entrei) */
-  .fazer td.acesso small { display: block; font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-  .fazer td.acesso.ok { background: var(--good-bg); color: var(--good); }
-  .fazer td.acesso.wa { color: var(--text-muted); font-size: 12px; }
-  .fazer button.entrei { padding: 4px 10px; font-size: 12.5px; background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
-  .fazer button.link-acesso { background: none; border: 0; padding: 0; color: var(--text-muted); text-decoration: underline; font-size: 11px; cursor: pointer; }
   @media (max-width: 700px) {
     .fazer th, .fazer td { padding: 6px 4px; font-size: 12px; }
     .fazer th { font-size: 9.5px; }
     .fazer col.c-emp { width: 24%; } .fazer col.c-aviso { width: 31%; }
     .fazer col.c-n { width: 11%; } .fazer col.c-esp { width: 12%; }
-    .fazer.com-acesso col.c-emp { width: 20%; } .fazer.com-acesso col.c-acesso { width: 14%; } .fazer.com-acesso col.c-aviso { width: 26%; }
-    .fazer.com-acesso col.c-n { width: 10%; } .fazer.com-acesso col.c-esp { width: 10%; }
     .fazer td.aviso small, .fazer small.agenda { font-size: 10.5px; }
   }
   tr.com-aviso td:first-child { border-left: 4px solid var(--accent); }
@@ -177,6 +167,14 @@
   .grade td.m { background: var(--surface-2); color: var(--text-muted); }
   .grade td.x { color: var(--border); }
   .grade tr.prim td { border-top: 2px solid var(--border); }
+  /* Acesso hoje (botao Entrei): coluna fixa entre Resp. e Estufa */
+  .grade.com-acesso .ca { left: 282px; width: 150px; min-width: 150px; max-width: 150px; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .grade.com-acesso .c3 { left: 432px; } .grade.com-acesso .c4 { left: 484px; }
+  .grade td.acesso small { display: block; font-size: 10.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
+  .grade td.acesso.ok { background: var(--good-bg); color: var(--good); }
+  .grade td.acesso.wa { color: var(--text-muted); font-size: 12px; }
+  .grade button.entrei { padding: 3px 10px; font-size: 12px; background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+  .grade button.link-acesso { background: none; border: 0; padding: 0; color: var(--text-muted); text-decoration: underline; font-size: 11px; cursor: pointer; }
   /* empresas */
   .emp td { padding: 4px 6px; }
   .emp input, .emp select { padding: 6px 8px; font-size: 13px; min-width: 110px; }
@@ -493,16 +491,14 @@ function renderFazer() {
     return `<td class="aviso"><b>Baixar ciclo${qtd > 1 ? ` (${qtd})` : ""}</b><small>Comunicado${qtd > 1 ? "s" : ""} ${esc(intervalos(r.aviso_comunicado))} · desde ${dia(r.aviso_em)}</small>${agenda}</td>`;
   };
   const celular = window.matchMedia("(max-width: 700px)").matches;   // no celular nao mostra a coluna Responsavel
-  const comAcesso = dados.acessos !== null;   // sem a tabela curvas_acessos a coluna nao aparece
-  $("conteudo").innerHTML = rows.length ? `<div class="caixa fazer${comAcesso ? " com-acesso" : ""}">${prioridadeHtml()}<table>
-    <colgroup><col class="c-emp">${celular ? "" : `<col class="c-resp">`}${comAcesso ? `<col class="c-acesso">` : ""}<col class="c-aviso"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-esp"></colgroup>
-    <tr><th>Empresa</th>${celular ? "" : "<th>Responsável</th>"}${comAcesso ? "<th>Acesso hoje</th>" : ""}<th>Aviso</th><th>Renomear</th><th>Certificar</th><th>Salvar</th><th>Aguardando salvamento</th></tr>
-    ${rows.map(r => `<tr class="${r.aviso_comunicado ? "com-aviso" : ""}"><td><b>${esc(r.empresa)}</b></td>${celular ? "" : `<td>${esc(r.responsavel) || "—"}</td>`}${comAcesso ? acessoCel(r.empresa) : ""}${aviso(r)}
+  $("conteudo").innerHTML = rows.length ? `<div class="caixa fazer">${prioridadeHtml()}<table>
+    <colgroup><col class="c-emp">${celular ? "" : `<col class="c-resp">`}<col class="c-aviso"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-esp"></colgroup>
+    <tr><th>Empresa</th>${celular ? "" : "<th>Responsável</th>"}<th>Aviso</th><th>Renomear</th><th>Certificar</th><th>Salvar</th><th>Aguardando salvamento</th></tr>
+    ${rows.map(r => `<tr class="${r.aviso_comunicado ? "com-aviso" : ""}"><td><b>${esc(r.empresa)}</b></td>${celular ? "" : `<td>${esc(r.responsavel) || "—"}</td>`}${aviso(r)}
       ${n(r.renomear, "ren")}${n(r.fazer_certificado, "cer")}${n(r.salvar_no_mes, "sal")}
       <td class="${horas(r) >= 24 ? "atraso" : ""}">${esc(r.esperando_ha) || "—"}</td></tr>`).join("")}</table></div>
     <div class="legenda">Aviso = comunicado na pasta da empresa. O sistema lê a data e o horário do tratamento no PDF: antes do horário aparece como "Agendado"; depois, "Baixar ciclo". Cada curva colada depois do início do tratamento resolve um comunicado (o mais antigo primeiro).<br>
-    Números = quantidade de curvas esperando cada tarefa. Em vermelho: esperando há mais de 24 horas.${comAcesso ? `<br>
-    Acesso hoje = clique em <b>Entrei</b> quando acessar o computador da empresa para baixar as curvas (fica verde com a hora e quem entrou; clicou errado, use desfazer). Empresas marcadas "WhatsApp" na aba Empresas não precisam de acesso.` : ""}</div>`
+    Números = quantidade de curvas esperando cada tarefa. Em vermelho: esperando há mais de 24 horas.</div>`
     : `<div class="caixa fazer">${prioridadeHtml()}</div><div class="caixa vazio">Nada pendente. Tudo em dia!</div>`;
   ligarPrioridade();
 }
@@ -511,19 +507,20 @@ function renderFazer() {
 const diaLocal = d => new Date(d).toLocaleDateString("sv-SE");   // AAAA-MM-DD no fuso do computador
 const horaLocal = d => new Date(d).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 const euNome = () => ($("quem").textContent || "").trim();
-function acessoCel(emp) {
+// Fica na aba Controle de curvas (coluna fixa, na primeira linha de cada empresa)
+function acessoCel(emp, cls = "") {
   const e = dados.empresas.find(x => x.nome === emp);
-  if (e && e.via_whatsapp) return `<td class="acesso wa" title="As curvas chegam pelo WhatsApp">WhatsApp</td>`;
+  if (e && e.via_whatsapp) return `<td class="acesso wa ${cls}" title="As curvas chegam pelo WhatsApp">WhatsApp</td>`;
   const a = (dados.acessos || []).find(x => x.empresa === emp);   // ja vem do mais recente para o mais antigo
   if (a && diaLocal(a.em) === diaLocal(Date.now())) {
     const meu = a.por && a.por === euNome();
-    return `<td class="acesso ok"><b>✓ ${horaLocal(a.em)}</b><small>${esc(a.por || "")}</small>${meu ? `<button type="button" class="link-acesso" data-desfazer="${a.id}">desfazer</button>` : ""}</td>`;
+    return `<td class="acesso ok ${cls}"><b>✓ ${horaLocal(a.em)}</b> <span>${esc(a.por || "")}</span>${meu ? ` <button type="button" class="link-acesso" data-desfazer="${a.id}">desfazer</button>` : ""}</td>`;
   }
   const ult = a ? `último ${new Date(a.em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} ${horaLocal(a.em)}${a.por ? " · " + esc(a.por) : ""}` : "sem acesso registrado";
-  return `<td class="acesso pend"><button type="button" class="entrei" data-emp="${esc(emp)}">Entrei</button><small>${ult}</small></td>`;
+  return `<td class="acesso pend ${cls}"><button type="button" class="entrei" data-emp="${esc(emp)}" title="${ult}">Entrei</button><small>${ult}</small></td>`;
 }
 $("conteudo").addEventListener("click", async ev => {
-  const b = ev.target.closest("button.entrei, button[data-desfazer]"); if (!b || aba !== "fazer") return;
+  const b = ev.target.closest("button.entrei, button[data-desfazer]"); if (!b || aba !== "grade") return;
   b.disabled = true;
   if (b.dataset.emp) {
     const { data, error } = await sb.from("curvas_acessos").insert({ empresa: b.dataset.emp, por: euNome() || null }).select().single();
@@ -535,7 +532,9 @@ $("conteudo").addEventListener("click", async ev => {
     if (error) { b.disabled = false; toast("Não foi possível desfazer: " + error.message); return; }
     dados.acessos = dados.acessos.filter(x => String(x.id) !== b.dataset.desfazer); toast("Acesso desfeito");
   }
-  renderFazer();
+  const box = $("gradeBox"), x = box ? box.scrollLeft : 0, y = box ? box.scrollTop : 0;
+  renderGrade();
+  const novo = $("gradeBox"); if (novo) { novo.scrollLeft = x; novo.scrollTop = y; }   // continua no mesmo lugar da tabela
 });
 
 // Campo PRIORIDADE (vermelho, em cima do cabecalho): texto livre, salvo no banco e igual para todos
@@ -582,13 +581,15 @@ function renderGrade() {
   const ord = [...linhas.values()].sort((a, b) => a.emp.localeCompare(b.emp, "pt-BR") || String(a.e ?? "").localeCompare(String(b.e ?? ""), "pt-BR", { numeric: true }));
   const cab = d => { const [y, m, dd] = d.split("-"); return `${dd}/${m}`; };
   let ant = null;
-  $("conteudo").innerHTML = ord.length ? `<div class="caixa grade" id="gradeBox"><table>
-    <tr><th class="fx c1">Empresa</th><th class="fx c2">Resp.</th><th class="fx c3">Estufa</th><th class="fx c4">Última</th>${dias.map(d => `<th>${cab(d)}</th>`).join("")}</tr>
+  const comAcesso = dados.acessos !== null;   // sem a tabela curvas_acessos a coluna Acesso hoje nao aparece
+  $("conteudo").innerHTML = ord.length ? `<div class="caixa grade${comAcesso ? " com-acesso" : ""}" id="gradeBox"><table>
+    <tr><th class="fx c1">Empresa</th><th class="fx c2">Resp.</th>${comAcesso ? `<th class="fx ca">Acesso hoje</th>` : ""}<th class="fx c3">Estufa</th><th class="fx c4">Última</th>${dias.map(d => `<th>${cab(d)}</th>`).join("")}</tr>
     ${ord.map(L => { const prim = L.emp !== ant; ant = L.emp;
-      return `<tr class="${prim ? "prim" : ""}"><td class="fx c1">${prim ? `<b>${esc(L.emp)}</b>` : ""}</td><td class="fx c2">${prim ? esc(respDe(L.emp)) : ""}</td><td class="fx c3">${L.e ?? "—"}</td><td class="fx c4"><b>${L.ult ?? "—"}</b></td>` +
+      return `<tr class="${prim ? "prim" : ""}"><td class="fx c1">${prim ? `<b>${esc(L.emp)}</b>` : ""}</td><td class="fx c2">${prim ? esc(respDe(L.emp)) : ""}</td>${comAcesso ? (prim ? acessoCel(L.emp, "fx ca") : `<td class="fx ca"></td>`) : ""}<td class="fx c3">${L.e ?? "—"}</td><td class="fx c4"><b>${L.ult ?? "—"}</b></td>` +
         dias.map(d => { const v = L.cel[d]; if (!v) return `<td class="x">-</td>`;
           const so = v.every(x => x.sigla); return `<td class="${so ? "m" : "v"}">${v.map(x => x.sigla ? `${x.ciclo} ${x.sigla}` : x.ciclo).join("; ")}</td>`; }).join("") + `</tr>`; }).join("")}
-    </table></div><div class="legenda">Cada célula = ciclo(s) da curva baixada naquele dia. Cinza = marcação (CM/CE cancelado, R ressecagem, MI mercado interno).</div>`
+    </table></div><div class="legenda">Cada célula = ciclo(s) da curva baixada naquele dia. Cinza = marcação (CM/CE cancelado, R ressecagem, MI mercado interno).${comAcesso ? `<br>
+    Acesso hoje = clique em <b>Entrei</b> quando acessar o computador da empresa para baixar as curvas: fica verde com a hora e quem entrou (clicou errado, use desfazer). Empresas marcadas "WhatsApp" na aba Empresas não precisam de acesso.` : ""}</div>`
     : `<div class="caixa vazio">Nenhuma curva em ${ANO}.</div>`;
   const box = $("gradeBox"); if (box) box.scrollLeft = box.scrollWidth;   // abre nos dias mais recentes
 }
