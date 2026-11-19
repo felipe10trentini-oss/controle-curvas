@@ -47,9 +47,9 @@
   .barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; position: sticky; top: var(--hh, 56px); z-index: 19; background: var(--bg, var(--surface-2)); padding: 8px 0; margin-top: -8px; }   /* abas fixas ao rolar, logo abaixo do cabecalho */
   .abas { display: flex; flex-wrap: wrap; gap: 6px; }
   .abas button.on { background: var(--text); color: var(--surface); border-color: var(--text); }
-  .recesso td.rec-sim { background: color-mix(in srgb, #e08a1e 28%, var(--surface)); } .recesso td.rec-nao { background: color-mix(in srgb, #2e9e5b 25%, var(--surface)); }   /* Sim = vai parar (laranja) | Nao = segue (verde) */
+  .recesso tr.rec-sim td { background: color-mix(in srgb, #2e9e5b 28%, var(--surface)); } .recesso tr.rec-nao td { background: color-mix(in srgb, #d23b3b 26%, var(--surface)); }   /* linha toda: Sim = verde | Nao = vermelho */
   .recesso td select { font-weight: 600; }
-  .recesso td.rec-sim select, .recesso td.rec-nao select { background: transparent; }
+  .recesso tr.rec-sim select, .recesso tr.rec-sim input, .recesso tr.rec-nao select, .recesso tr.rec-nao input { background: transparent; }
   .recesso td input[data-campo="recesso_periodo"] { min-width: 220px; }
   .barra .filtros { margin-left: auto; display: flex; gap: 8px; }
   .barra .filtros input { width: 200px; } .barra .filtros select { width: 150px; }
@@ -641,8 +641,8 @@ function renderRecesso() {
   const sim = todas.filter(e => e.recesso === "Sim").length, nao = todas.filter(e => e.recesso === "Não").length;
   $("conteudo").innerHTML = `<div class="caixa emp recesso">
     <table><tr><th>Empresa</th><th>Terá recesso no fim do ano?</th><th>Período do recesso</th></tr>
-    ${rows.map(e => `<tr><td class="nome">${esc(e.nome)}</td>
-      <td class="${e.recesso === "Sim" ? "rec-sim" : e.recesso === "Não" ? "rec-nao" : ""}"><select data-nome="${esc(e.nome)}" data-campo="recesso"><option value=""></option>${["Sim", "Não"].map(o => `<option ${o === e.recesso ? "selected" : ""}>${o}</option>`).join("")}</select></td>
+    ${rows.map(e => `<tr class="${e.recesso === "Sim" ? "rec-sim" : e.recesso === "Não" ? "rec-nao" : ""}"><td class="nome">${esc(e.nome)}</td>
+      <td><select data-nome="${esc(e.nome)}" data-campo="recesso"><option value=""></option>${["Sim", "Não"].map(o => `<option ${o === e.recesso ? "selected" : ""}>${o}</option>`).join("")}</select></td>
       <td><input value="${esc(e.recesso_periodo)}" placeholder="ex.: 22/12 a 05/01" data-nome="${esc(e.nome)}" data-campo="recesso_periodo"></td></tr>`).join("")}
     </table></div>
     <div class="legenda">${todas.length} empresas ativas · ${sim} com recesso · ${nao} sem recesso · ${todas.length - sim - nao} sem resposta. As alterações são salvas sozinhas ao sair do campo.</div>`;
