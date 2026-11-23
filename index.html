@@ -632,20 +632,25 @@ function renderEmpresas() {
   };
 }
 /* ---------------- Recesso de fim de ano (colunas recesso / recesso_periodo em curvas_empresas; SQL 14) ---------------- */
+let filtroRecesso = "";   // "" = todas | Sim | Não | sem = sem resposta
 function renderRecesso() {
-  const rows = dados.empresas.filter(e => e.ativa && passaFiltro(e.nome, e.responsavel));
+  const rows = dados.empresas.filter(e => e.ativa && passaFiltro(e.nome, e.responsavel) && (!filtroRecesso || (filtroRecesso === "sem" ? !e.recesso : e.recesso === filtroRecesso)));
   if (dados.empresas.length && !("recesso" in dados.empresas[0])) {
     $("conteudo").innerHTML = `<div class="caixa vazio">Falta criar as colunas do recesso no banco: rode o arquivo <b>14-recesso.sql</b> no SQL Editor do Supabase e atualize a página.</div>`; return;
   }
   const todas = dados.empresas.filter(e => e.ativa);
   const sim = todas.filter(e => e.recesso === "Sim").length, nao = todas.filter(e => e.recesso === "Não").length;
-  $("conteudo").innerHTML = `<div class="caixa emp recesso">
+  const opt = (v, t) => `<option value="${v}" ${filtroRecesso === v ? "selected" : ""}>${t}</option>`;
+  $("conteudo").innerHTML = `<div style="margin-bottom:10px;display:flex;gap:8px;align-items:center"><label for="filtroRecesso" style="font-weight:600">Mostrar:</label>
+      <select id="filtroRecesso" style="width:auto">${opt("", "Todas as empresas")}${opt("Sim", `Vão parar (${sim})`)}${opt("Não", `Não vão parar (${nao})`)}${opt("sem", `Sem resposta (${todas.length - sim - nao})`)}</select></div>
+    <div class="caixa emp recesso">
     <table><tr><th>Empresa</th><th>Terá recesso no fim do ano?</th><th>Período do recesso</th></tr>
     ${rows.map(e => `<tr class="${e.recesso === "Sim" ? "rec-sim" : e.recesso === "Não" ? "rec-nao" : ""}"><td class="nome">${esc(e.nome)}</td>
       <td><select data-nome="${esc(e.nome)}" data-campo="recesso"><option value=""></option>${["Sim", "Não"].map(o => `<option ${o === e.recesso ? "selected" : ""}>${o}</option>`).join("")}</select></td>
       <td><input value="${esc(e.recesso_periodo)}" placeholder="ex.: 22/12 a 05/01" data-nome="${esc(e.nome)}" data-campo="recesso_periodo"></td></tr>`).join("")}
     </table></div>
     <div class="legenda">${todas.length} empresas ativas · ${sim} com recesso · ${nao} sem recesso · ${todas.length - sim - nao} sem resposta. As alterações são salvas sozinhas ao sair do campo.</div>`;
+  $("filtroRecesso").onchange = ev => { filtroRecesso = ev.target.value; renderRecesso(); };
   document.querySelectorAll(".recesso [data-campo]").forEach(el => el.onchange = async ev => { await salvarCampo(ev); renderRecesso(); });
 }
 async function salvarCampo(ev) {
