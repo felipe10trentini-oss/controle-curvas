@@ -338,7 +338,8 @@ async function carregarCurvas() {   // todas as curvas do ano (pagina de 1000 em
     if (error) throw error;
     lista.push(...data); if (data.length < 1000) break;
   }
-  dados.curvas = lista;
+  const inativas = new Set(dados.empresas.filter(e => e.ativa === false).map(e => e.nome));   // empresa desativada some do Controle de curvas e da Controladoria
+  dados.curvas = lista.filter(c => !inativas.has(c.empresa));
 }
 function montarFiltroResp() {
   const sel = $("resp"), atual = sel.value;
